@@ -40,7 +40,7 @@
 @push('scripts')
 <script>
 (function(){
-  // console.log("{{ $resolvedClientId ?? 'DEFAULT' }}");
+  console.log("{{ $resolvedClientId ?? 'DEFAULT' }}");
   function setLoading(btn,on,txt){
     if(!btn) return;
     const label = btn.querySelector('.btn__label');
@@ -69,9 +69,8 @@
       name: form.get('name') || null,
       email: form.get('email') || null,
       phone: form.get('phone') || null,
+      client_id: "{{ $resolvedClientId ?? 'DEFAULT' }}"
     };
-
-    payload.client_id = "{{ $resolvedClientId ?? 'DEFAULT' }}";
 
     setLoading(payBtn, true, 'Memproses…');
     try{
