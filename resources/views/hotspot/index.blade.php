@@ -6,6 +6,8 @@
   <h1 class="text-2xl font-semibold mb-4">Beli Voucher Hotspot</h1>
 
   <form id="frm" class="space-y-3" onsubmit="return startCheckout(event)">
+    <input type="hidden" id="client_id" name="client_id" value="{{ $resolvedClientId ?? 'DEFAULT' }}">
+
     <label class="block">
       <span class="text-sm">Pilih voucher</span>
       <select name="voucher_id" class="border rounded p-2 w-full">
@@ -54,6 +56,17 @@
     }
   }
 
+  function getClientIdFromHost(){
+    // subdomain: c1.pay.adanih.info -> C1
+    var h = location.hostname.split('.');
+    if (h.length > 2) {
+      return (h[0] || 'DEFAULT').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12) || 'DEFAULT';
+    }
+    // fallback: ?client=C1
+    var q = new URLSearchParams(location.search).get('client') || 'DEFAULT';
+    return q.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);
+  }
+
   const payBtn = document.getElementById('payBtn');
   const errBox = document.getElementById('payErr');
 
@@ -69,7 +82,7 @@
       name: form.get('name') || null,
       email: form.get('email') || null,
       phone: form.get('phone') || null,
-      client_id: "{{ $resolvedClientId ?? 'DEFAULT' }}"
+      client_id: form.get('client_id') || null,
     };
 
     setLoading(payBtn, true, 'Memproses…');

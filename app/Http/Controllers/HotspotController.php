@@ -35,7 +35,20 @@ class HotspotController extends Controller
       'client_id' => 'nullable|string|max:32',
     ]);
 
-    $clientId = OrderId::sanitizeClient($data['client_id'] ?? 'DEFAULT');
+    // 1) dari payload
+    $clientId = \App\Support\OrderId::sanitizeClient($data['client_id'] ?? '');
+
+    // 2) fallback dari subdomain
+    if (!$clientId) {
+      $host = $request->getHost(); // c1.pay.adanih.info
+      if (substr_count($host, '.') >= 2) {
+        $first = explode('.', $host)[0] ?? '';
+        $clientId = \App\Support\OrderId::sanitizeClient($first);
+      }
+    }
+
+    if (!$clientId) $clientId = 'DEFAULT';
+
     $orderId = OrderId::make($clientId);
 
     $voucher = \App\Models\HotspotVoucher::findOrFail($data['voucher_id']);
