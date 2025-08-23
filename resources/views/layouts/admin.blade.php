@@ -101,12 +101,20 @@
   <div class="wrap">
     <aside class="side">
       <div class="brand">Admin Panel</div>
+      @php
+        $rname = optional(request()->route())->getName();
+        $isClients  = \Illuminate\Support\Str::startsWith((string)$rname, 'clients.');
+        $isVouchers = \Illuminate\Support\Str::startsWith((string)$rname, 'vouchers.');
+        $isPays     = \Illuminate\Support\Str::startsWith((string)$rname, 'admin.payments.');
+        $isOrders   = \Illuminate\Support\Str::startsWith((string)$rname, 'admin.orders.');
+      @endphp
+
       <nav class="nav">
         <a href="{{ route('admin.dashboard') }}" class="{{ request()->routeIs('admin.dashboard')?'active':'' }}">Dashboard</a>
-        <a href="{{ route('clients.index') }}" class="{{ str_starts_with(request()->route()->getName(),'clients.')?'active':'' }}">Clients</a>
-        <a href="{{ url('/admin/payments') }}">Payments</a>
-        <a href="{{ url('/admin/orders') }}">Orders</a>
-        <a href="{{ route('vouchers.index') }}" class="{{ str_starts_with(request()->route()->getName(),'vouchers.')?'active':'' }}">Vouchers</a>
+        <a href="{{ route('clients.index') }}"  class="{{ $isClients?'active':'' }}">Clients</a>
+        <a href="{{ route('admin.payments.index') }}" class="{{ $isPays?'active':'' }}">Payments</a>
+        <a href="{{ route('admin.orders.index') }}"   class="{{ $isOrders?'active':'' }}">Orders</a>
+        <a href="{{ route('vouchers.index') }}" class="{{ $isVouchers?'active':'' }}">Vouchers</a>
       </nav>
     </aside>
     <div>

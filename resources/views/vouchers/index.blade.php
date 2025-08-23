@@ -28,10 +28,6 @@
       </div>
     </div>
   </div>
-
-  @if(session('ok')) <div class="flash flash--ok">{{ session('ok') }}</div> @endif
-  @if(session('error')) <div class="flash flash--err">{{ session('error') }}</div> @endif
-
   <div class="table-wrap">
     <table class="table">
       <thead>

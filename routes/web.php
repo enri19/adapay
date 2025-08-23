@@ -7,6 +7,9 @@ use App\Http\Controllers\ReturnController;
 use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\VoucherController;
+use App\Http\Controllers\AdminPaymentController;
+use App\Http\Controllers\AdminOrderController;
+use App\Http\Controllers\AdminReportController;
 
 Route::get('/hotspot', [HotspotController::class, 'index'])->name('hotspot.index');
 Route::get('/hotspot/order/{orderId}', [HotspotController::class, 'orderView'])->name('hotspot.order');
@@ -21,6 +24,12 @@ Route::post('/admin/logout', [AdminAuthController::class,'logout'])->name('admin
 Route::prefix('admin')->middleware('admin')->group(function () {
   Route::get('/', function(){ return view('admin.dashboard'); })->name('admin.dashboard');
   Route::resource('vouchers', VoucherController::class)->except(['show']);
+
+  Route::get('/payments', [AdminPaymentController::class,'index'])->name('admin.payments.index');
+  Route::get('/orders',   [AdminOrderController::class,'index'])->name('admin.orders.index');
+  
+  Route::get('/payments/export', [AdminReportController::class,'paymentsExport'])->name('admin.payments.export');
+  Route::get('/orders/export',   [AdminReportController::class,'ordersExport'])->name('admin.orders.export');
 
   // clients CRUD (punya kamu sebelumnya)
   Route::name('clients.')->group(function(){
