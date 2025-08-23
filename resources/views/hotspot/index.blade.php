@@ -3,6 +3,10 @@
 
 @push('head')
 <style>
+  .pay-section{margin-top:.5rem}
+  .pay-header{display:flex;align-items:baseline;gap:.5rem;margin-bottom:.4rem}
+  .pay-title{font-weight:700}
+  .pay-desc{font-size:.85rem;color:#6b7280}
   .pay-methods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem}
   .pm-card{
     display:flex;align-items:center;justify-content:center;gap:.5rem;
@@ -55,11 +59,13 @@
       <input name="email" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="Email (opsional)" type="email">
     </div>
 
-    {{-- Metode (logo cards) --}}
-    <div>
-      <span class="text-sm font-medium block mb-1">Metode pembayaran</span>
-      <div class="pay-methods" role="radiogroup" aria-label="Metode pembayaran">
-        {{-- QRIS --}}
+    {{-- Metode: QRIS (disarankan) --}}
+    <div class="pay-section">
+      <div class="pay-header">
+        <div class="pay-title">QRIS (disarankan)</div>
+        <div class="pay-desc">Pembayaran DANA dan e-wallet lain (mis. OVO, LinkAja, m-banking yang mendukung QRIS) melalui scan QR.</div>
+      </div>
+      <div class="pay-methods" role="radiogroup" aria-label="QRIS">
         <label class="pm-card" data-value="qris" tabindex="0" role="radio" aria-checked="true">
           <input class="pm-radio" type="radio" name="method" value="qris" checked>
           <img class="pm-logo"
@@ -67,7 +73,16 @@
               alt="QRIS"
               onerror="this.replaceWith(document.createTextNode('QRIS'))">
         </label>
+      </div>
+    </div>
 
+    {{-- Metode: E-Wallet langsung --}}
+    <div class="pay-section">
+      <div class="pay-header">
+        <div class="pay-title">E-Wallet langsung</div>
+        <div class="pay-desc">Bayar langsung di aplikasi (tanpa scan QR).</div>
+      </div>
+      <div class="pay-methods" role="radiogroup" aria-label="E-Wallet">
         {{-- GoPay --}}
         <label class="pm-card" data-value="gopay" tabindex="0" role="radio" aria-checked="false">
           <input class="pm-radio" type="radio" name="method" value="gopay">
@@ -239,37 +254,40 @@
     }
   }
 
-  // kartu → pilih radio + ubah style terpilih
+  // Metode pembayaran
   document.addEventListener('DOMContentLoaded', function(){
-    const group = document.querySelector('.pay-methods');
-    if(!group) return;
+    const groups = Array.from(document.querySelectorAll('.pay-methods'));
 
     function setChecked(card){
-      // uncheck all
-      group.querySelectorAll('.pm-card').forEach(c=>{
+      // Uncheck semua kartu di SEMUA grup
+      document.querySelectorAll('.pm-card').forEach(c=>{
         c.setAttribute('aria-checked','false');
         const r = c.querySelector('.pm-radio'); if (r) r.checked = false;
       });
-      // check selected
+      // Check kartu terpilih
       card.setAttribute('aria-checked','true');
       const radio = card.querySelector('.pm-radio'); if (radio) radio.checked = true;
     }
 
-    // init: pastikan salah satu terpilih (qris default)
-    const firstChecked = group.querySelector('.pm-card .pm-radio:checked');
-    if (firstChecked) setChecked(firstChecked.closest('.pm-card'));
+    // Init: pastikan yang checked di DOM tersinkron ke gaya
+    const current = document.querySelector('.pm-radio:checked');
+    if (current) {
+      const card = current.closest('.pm-card');
+      if (card) setChecked(card);
+    }
 
-    group.addEventListener('click', function(e){
-      const card = e.target.closest('.pm-card'); if(!card) return;
-      setChecked(card);
-    });
-
-    // keyboard accessible: enter/space
-    group.addEventListener('keydown', function(e){
-      if (e.key === ' ' || e.key === 'Enter'){
+    // Delegasi click & keyboard di semua grup
+    groups.forEach(group=>{
+      group.addEventListener('click', function(e){
         const card = e.target.closest('.pm-card'); if(!card) return;
-        e.preventDefault(); setChecked(card);
-      }
+        setChecked(card);
+      });
+      group.addEventListener('keydown', function(e){
+        if (e.key === ' ' || e.key === 'Enter'){
+          const card = e.target.closest('.pm-card'); if(!card) return;
+          e.preventDefault(); setChecked(card);
+        }
+      });
     });
   });
 })();
