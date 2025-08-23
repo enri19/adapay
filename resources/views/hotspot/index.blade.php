@@ -1,6 +1,26 @@
 @extends('layouts.app')
 @section('title', 'Beli Voucher Hotspot')
 
+@push('head')
+<style>
+  .pay-methods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem}
+  .pm-card{
+    display:flex;align-items:center;justify-content:center;gap:.5rem;
+    border:1px solid #e5e7eb;border-radius:.6rem;background:#fff;padding:.6rem .75rem;
+    cursor:pointer; user-select:none;
+    transition:border-color .15s ease, box-shadow .15s ease, transform .06s ease;
+  }
+  .pm-card:hover{ background:#fafafa }
+  .pm-card:active{ transform:translateY(1px) }
+  .pm-card[aria-checked="true"]{
+    border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.15);
+  }
+  .pm-radio{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
+  .pm-logo{width:84px;height:28px;object-fit:contain}
+  @media (max-width:768px){ .pay-methods{grid-template-columns:1fr 1fr} }
+</style>
+@endpush
+
 @section('content')
 <div class="max-w-xl mx-auto p-4">
   <h1 class="text-2xl font-semibold mb-1">Beli Voucher Hotspot</h1>
@@ -35,11 +55,37 @@
       <input name="email" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="Email (opsional)" type="email">
     </div>
 
-    {{-- Metode --}}
-    <div class="flex items-center gap-3">
-      <label class="flex items-center gap-1"><input type="radio" name="method" value="qris" checked> <span>QRIS</span></label>
-      <label class="flex items-center gap-1"><input type="radio" name="method" value="gopay"> <span>GoPay</span></label>
-      <label class="flex items-center gap-1"><input type="radio" name="method" value="shopeepay"> <span>ShopeePay</span></label>
+    {{-- Metode (logo cards) --}}
+    <div>
+      <span class="text-sm font-medium block mb-1">Metode pembayaran</span>
+      <div class="pay-methods" role="radiogroup" aria-label="Metode pembayaran">
+        {{-- QRIS --}}
+        <label class="pm-card" data-value="qris" tabindex="0" role="radio" aria-checked="true">
+          <input class="pm-radio" type="radio" name="method" value="qris" checked>
+          <img class="pm-logo"
+              src="{{ asset('images/pay/qris.svg') }}"
+              alt="QRIS"
+              onerror="this.replaceWith(document.createTextNode('QRIS'))">
+        </label>
+
+        {{-- GoPay --}}
+        <label class="pm-card" data-value="gopay" tabindex="0" role="radio" aria-checked="false">
+          <input class="pm-radio" type="radio" name="method" value="gopay">
+          <img class="pm-logo"
+              src="{{ asset('images/pay/gopay.svg') }}"
+              alt="GoPay"
+              onerror="this.replaceWith(document.createTextNode('GoPay'))">
+        </label>
+
+        {{-- ShopeePay --}}
+        <label class="pm-card" data-value="shopeepay" tabindex="0" role="radio" aria-checked="false">
+          <input class="pm-radio" type="radio" name="method" value="shopeepay">
+          <img class="pm-logo"
+              src="{{ asset('images/pay/shopeepay.svg') }}"
+              alt="ShopeePay"
+              onerror="this.replaceWith(document.createTextNode('ShopeePay'))">
+        </label>
+      </div>
     </div>
 
     <div id="payErr" class="text-xs text-red-600 hidden"></div>
@@ -192,6 +238,40 @@
       return false;
     }
   }
+
+  // kartu → pilih radio + ubah style terpilih
+  document.addEventListener('DOMContentLoaded', function(){
+    const group = document.querySelector('.pay-methods');
+    if(!group) return;
+
+    function setChecked(card){
+      // uncheck all
+      group.querySelectorAll('.pm-card').forEach(c=>{
+        c.setAttribute('aria-checked','false');
+        const r = c.querySelector('.pm-radio'); if (r) r.checked = false;
+      });
+      // check selected
+      card.setAttribute('aria-checked','true');
+      const radio = card.querySelector('.pm-radio'); if (radio) radio.checked = true;
+    }
+
+    // init: pastikan salah satu terpilih (qris default)
+    const firstChecked = group.querySelector('.pm-card .pm-radio:checked');
+    if (firstChecked) setChecked(firstChecked.closest('.pm-card'));
+
+    group.addEventListener('click', function(e){
+      const card = e.target.closest('.pm-card'); if(!card) return;
+      setChecked(card);
+    });
+
+    // keyboard accessible: enter/space
+    group.addEventListener('keydown', function(e){
+      if (e.key === ' ' || e.key === 'Enter'){
+        const card = e.target.closest('.pm-card'); if(!card) return;
+        e.preventDefault(); setChecked(card);
+      }
+    });
+  });
 })();
 </script>
 @endpush
