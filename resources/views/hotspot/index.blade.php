@@ -85,6 +85,8 @@
       client_id: form.get('client_id') || null,
     };
 
+    console.log(payload); return;
+
     setLoading(payBtn, true, 'Memproses…');
     try{
       const res = await fetch('/api/hotspot/checkout', {
