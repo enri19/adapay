@@ -10,6 +10,7 @@ use App\Http\Controllers\VoucherController;
 use App\Http\Controllers\AdminPaymentController;
 use App\Http\Controllers\AdminOrderController;
 use App\Http\Controllers\AdminReportController;
+use App\Http\Controllers\AdminDashboardController;
 
 Route::get('/hotspot', [HotspotController::class, 'index'])->name('hotspot.index');
 Route::get('/hotspot/order/{orderId}', [HotspotController::class, 'orderView'])->name('hotspot.order');
@@ -22,7 +23,7 @@ Route::post('/admin/logout', [AdminAuthController::class,'logout'])->name('admin
 
 // Dashboard & fitur admin
 Route::prefix('admin')->middleware('admin')->group(function () {
-  Route::get('/', function(){ return view('admin.dashboard'); })->name('admin.dashboard');
+  Route::get('/', [AdminDashboardController::class,'index'])->name('admin.dashboard')->middleware('admin');
   Route::resource('vouchers', VoucherController::class)->except(['show']);
 
   Route::get('/payments', [AdminPaymentController::class,'index'])->name('admin.payments.index');
