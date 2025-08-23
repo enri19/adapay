@@ -1,0 +1,15 @@
+/vendor
+/node_modules
+/public/storage
+/storage/*.key
+/.env
+/.env.*
+/storage/logs
+/storage/framework/cache
+/storage/framework/sessions
+/storage/framework/views
+/.idea
+/.vscode
+.DS_Store
+npm-debug.log*
+yarn-error.log*
