@@ -8,12 +8,13 @@
     :root{
       --bg:#f8fafc; --card:#fff; --tx:#111827; --mut:#6b7280;
       --bd:#e5e7eb; --b:#2563eb; --b2:#1d4ed8; --ok:#10b981; --err:#ef4444; --warn:#f59e0b;
+      --sideW: 240px;
     }
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Arial}
     a{color:var(--b);text-decoration:none} a:hover{text-decoration:underline}
 
-    .wrap{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+    .wrap{display:block;grid-template-columns:240px 1fr;min-height:100vh}
     .side{border-right:1px solid var(--bd);background:#fff}
     .brand{padding:20.5px;font-weight:800;border-bottom:1px solid var(--bd)}
     .nav a{display:block;padding:10px 16px;border-left:3px solid transparent;color:#374151}
@@ -56,6 +57,34 @@
     [type="button"][disabled],
     [type="submit"][disabled]{
       cursor: not-allowed !important;
+    }
+
+    /* sidebar nempel kiri, tinggi penuh, bisa di-scroll */
+    .side{
+      position:fixed; left:0; top:0; bottom:0;
+      width:var(--sideW);
+      overflow:auto;
+      border-right:1px solid var(--bd);
+      background:#fff; z-index:30;
+    }
+
+    /* offset area konten agar tidak ketutup sidebar */
+    .wrap > div{
+      margin-left:var(--sideW);
+      min-height:100vh;
+      display:flex; flex-direction:column;
+    }
+
+    /* header tetap sticky di area konten */
+    .top{ position:sticky; top:0; z-index:10; }
+
+    /* responsif: di mobile, sidebar jadi normal (non-fixed) dan content full width */
+    @media (max-width:900px){
+      :root { --sideW: 0px; }
+      .side{ position:static; width:auto; height:auto; }
+      .wrap > div{ margin-left:0; }
+      .nav{ display:flex; overflow:auto; }
+      .nav a{ white-space:nowrap; }
     }
 
     /* Forms */
