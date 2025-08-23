@@ -6,6 +6,7 @@ use App\Http\Controllers\HotspotController;
 use App\Http\Controllers\ReturnController;
 use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\VoucherController;
 
 Route::get('/hotspot', [HotspotController::class, 'index'])->name('hotspot.index');
 Route::get('/hotspot/order/{orderId}', [HotspotController::class, 'orderView'])->name('hotspot.order');
@@ -19,6 +20,7 @@ Route::post('/admin/logout', [AdminAuthController::class,'logout'])->name('admin
 // Dashboard & fitur admin
 Route::prefix('admin')->middleware('admin')->group(function () {
   Route::get('/', function(){ return view('admin.dashboard'); })->name('admin.dashboard');
+  Route::resource('vouchers', VoucherController::class)->except(['show']);
 
   // clients CRUD (punya kamu sebelumnya)
   Route::name('clients.')->group(function(){

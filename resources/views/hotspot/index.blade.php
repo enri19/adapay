@@ -10,12 +10,19 @@
 
     <label class="block">
       <span class="text-sm">Pilih voucher</span>
-      <select name="voucher_id" class="border rounded p-2 w-full">
-        @foreach($vouchers as $v)
-          <option value="{{ $v->id }}">{{ $v->name }} — Rp{{ number_format($v->price,0,',','.') }}</option>
-        @endforeach
-      </select>
+      @if($vouchers->isEmpty())
+        <div class="p-3 text-sm text-gray-600 border rounded">
+          Belum ada voucher untuk lokasi ini.
+        </div>
+      @else
+        <select name="voucher_id" class="border rounded p-2 w-full">
+          @foreach($vouchers as $v)
+            <option value="{{ $v->id }}">{{ $v->name }} — Rp{{ number_format($v->price,0,',','.') }}</option>
+          @endforeach
+        </select>
+      @endif
     </label>
+
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
       <input name="name" class="border rounded p-2" placeholder="Nama (opsional)">

@@ -7,16 +7,25 @@ use App\Models\HotspotUser;
 use App\Payments\Payment as PaymentResolver;
 use App\Services\HotspotProvisioner;
 use App\Support\OrderId;
+use Illuminate\Validation\Rule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class HotspotController extends Controller
 {
-  public function index()
+  public function index(\Illuminate\Http\Request $request)
   {
-    $vouchers = HotspotVoucher::orderBy('price')->get();
-    return view('hotspot.index', compact('vouchers'));
+    // ambil dari middleware ResolveClient atau dari host
+    $clientId = strtoupper((string)($request->session()->get('client_id') ?: 'DEFAULT'));
+    $vouchers = \App\Models\HotspotVoucher::forClient($clientId)
+      ->orderBy('price')
+      ->get();
+
+    return view('hotspot.index', [
+      'vouchers' => $vouchers,
+      'resolvedClientId' => $clientId,
+    ]);
   }
 
   public function orderView(string $orderId)
@@ -48,6 +57,18 @@ class HotspotController extends Controller
     }
 
     if (!$clientId) $clientId = 'DEFAULT';
+
+    // Ambil voucher yang hanya boleh milik client terkait (atau global)
+    $voucher = HotspotVoucher::where('id', (int)$data['voucher_id'])
+      ->forClient($clientId)
+      ->first();
+
+    if (!$voucher) {
+      return response()->json([
+        'error' => 'INVALID_VOUCHER',
+        'message' => 'Voucher tidak tersedia untuk lokasi ini.'
+      ], 422);
+    }
 
     $orderId = OrderId::make($clientId);
 

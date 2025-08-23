@@ -106,7 +106,7 @@
         <a href="{{ route('clients.index') }}" class="{{ str_starts_with(request()->route()->getName(),'clients.')?'active':'' }}">Clients</a>
         <a href="{{ url('/admin/payments') }}">Payments</a>
         <a href="{{ url('/admin/orders') }}">Orders</a>
-        <a href="{{ url('/admin/vouchers') }}">Vouchers</a>
+        <a href="{{ route('vouchers.index') }}" class="{{ str_starts_with(request()->route()->getName(),'vouchers.')?'active':'' }}">Vouchers</a>
       </nav>
     </aside>
     <div>
