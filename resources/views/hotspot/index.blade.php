@@ -3,19 +3,21 @@
 
 @section('content')
 <div class="max-w-xl mx-auto p-4">
-  <h1 class="text-2xl font-semibold mb-4">Beli Voucher Hotspot</h1>
+  <h1 class="text-2xl font-semibold mb-1">Beli Voucher Hotspot</h1>
+  <p class="text-sm text-gray-600 mb-4">Isi nama, pilih voucher & metode, lalu lanjut bayar.</p>
 
-  <form id="frm" class="space-y-3" onsubmit="return startCheckout(event)">
+  <form id="frm" class="space-y-3" onsubmit="return startCheckout(event)" novalidate>
     <input type="hidden" id="client_id" name="client_id" value="{{ $resolvedClientId ?? 'DEFAULT' }}">
 
+    {{-- Voucher --}}
     <label class="block">
-      <span class="text-sm">Pilih voucher</span>
+      <span class="text-sm font-medium">Pilih voucher</span>
       @if($vouchers->isEmpty())
-        <div class="p-3 text-sm text-gray-600 border rounded">
+        <div class="p-3 text-sm text-gray-600 border rounded bg-gray-50">
           Belum ada voucher untuk lokasi ini.
         </div>
       @else
-        <select name="voucher_id" class="border rounded p-2 w-full">
+        <select name="voucher_id" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" required>
           @foreach($vouchers as $v)
             <option value="{{ $v->id }}">{{ $v->name }} — Rp{{ number_format($v->price,0,',','.') }}</option>
           @endforeach
@@ -23,13 +25,17 @@
       @endif
     </label>
 
-
+    {{-- Identitas --}}
     <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-      <input name="name" class="border rounded p-2" placeholder="Nama (opsional)">
-      <input name="email" class="border rounded p-2" placeholder="Email (opsional)">
-      <input name="phone" class="border rounded p-2" placeholder="HP (opsional)">
+      <div>
+        <input name="name" id="fldName" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="Nama lengkap" required minlength="2" pattern=".*\S.*">
+        <p id="errName" class="text-xs text-red-600 mt-1 hidden"></p>
+      </div>
+      <input name="email" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="Email (opsional)" type="email">
+      <input name="phone" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="HP (opsional)">
     </div>
 
+    {{-- Metode --}}
     <div class="flex items-center gap-3">
       <label class="flex items-center gap-1"><input type="radio" name="method" value="qris" checked> <span>QRIS</span></label>
       <label class="flex items-center gap-1"><input type="radio" name="method" value="gopay"> <span>GoPay</span></label>
@@ -38,10 +44,14 @@
 
     <div id="payErr" class="text-xs text-red-600 hidden"></div>
 
-    <button id="payBtn" type="submit" class="btn btn--primary">
+    <button id="payBtn" type="submit" class="btn btn--primary" {{ $vouchers->isEmpty() ? 'disabled' : '' }}>
       <span class="btn__label">Bayar</span>
       <span class="spinner hidden" aria-hidden="true"></span>
     </button>
+
+    @if($vouchers->isEmpty())
+      <p class="text-xs text-gray-500">Tombol bayar non-aktif karena belum ada voucher.</p>
+    @endif
   </form>
 </div>
 @endsection
@@ -62,7 +72,6 @@
     }
   }
 
-  // Ambil client dari subdomain atau ?client=
   function getClientIdFromHost(){
     const parts = location.hostname.split('.');
     if (parts.length > 2) {
@@ -72,11 +81,36 @@
     return q.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);
   }
 
-  // SET hidden client_id saat halaman load (override nilai server bila subdomain ada)
+  function showFieldError(input, msg){
+    const err = document.getElementById('errName');
+    if (!err) return;
+    if (msg){
+      err.textContent = msg;
+      err.classList.remove('hidden');
+      input.classList.add('border-red-500','focus:ring-red-200');
+      input.setAttribute('aria-invalid','true');
+      input.focus();
+    } else {
+      err.textContent = '';
+      err.classList.add('hidden');
+      input.classList.remove('border-red-500','focus:ring-red-200');
+      input.removeAttribute('aria-invalid');
+    }
+  }
+
+  // set hidden client_id saat load
   document.addEventListener('DOMContentLoaded', function(){
     const hid = document.getElementById('client_id');
     const cid = getClientIdFromHost();
     if (hid) hid.value = cid;
+
+    // bersihkan error saat user mengetik
+    const nameInput = document.getElementById('fldName');
+    if (nameInput){
+      nameInput.addEventListener('input', function(){
+        if (nameInput.value.trim().length >= 2) showFieldError(nameInput, null);
+      });
+    }
   });
 
   const payBtn = document.getElementById('payBtn');
@@ -86,10 +120,20 @@
     e.preventDefault();
     errBox.classList.add('hidden'); errBox.textContent = '';
 
-    // Ambil data form
-    const form = new FormData(document.getElementById('frm'));
+    const formEl = document.getElementById('frm');
+    const nameInput = document.getElementById('fldName');
 
-    // Pastikan client_id selalu dari domain/query
+    // validasi: nama wajib & bukan spasi
+    const nameVal = (nameInput?.value || '').trim();
+    if (!nameVal || nameVal.length < 2){
+      showFieldError(nameInput, 'Nama wajib diisi (min. 2 karakter).');
+      return false;
+    } else {
+      showFieldError(nameInput, null);
+    }
+
+    // kumpulkan data
+    const form = new FormData(formEl);
     const cid = getClientIdFromHost();
     form.set('client_id', cid);
     const hid = document.getElementById('client_id'); if (hid) hid.value = cid;
@@ -97,14 +141,11 @@
     const payload = {
       voucher_id: Number(form.get('voucher_id')),
       method: (form.get('method') || 'qris').toLowerCase(),
-      name: form.get('name') || null,
+      name: nameVal,
       email: form.get('email') || null,
       phone: form.get('phone') || null,
       client_id: cid,
     };
-
-    // HAPUS debug stop:
-    // console.log(payload); return;
 
     setLoading(payBtn, true, 'Memproses…');
     try{
@@ -120,6 +161,15 @@
       }
 
       if(!res.ok){
+        // tangani 422 validasi server (mis. "The name field is required.")
+        if (res.status === 422) {
+          const msg = (data && (data.message || (data.errors && (data.errors.name||[])[0]))) || 'Data tidak valid.';
+          // kalau error menyebut name
+          if ((data.errors && data.errors.name) || /name/i.test(String(msg))) {
+            showFieldError(nameInput, msg);
+          }
+          throw new Error(msg);
+        }
         const code = data.error || 'CHECKOUT_FAILED';
         let msg = data.message || 'Gagal membuat transaksi.';
         if(code==='UPSTREAM_TEMPORARY') msg = 'Channel pembayaran sedang gangguan (sandbox). Coba lagi.';
