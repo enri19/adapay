@@ -17,17 +17,7 @@ class HotspotController extends Controller
   public function index(\Illuminate\Http\Request $request)
   {
     $clientId = \App\Support\ClientResolver::resolve($request);
-
-    \Log::debug('client_resolve', [
-      'host' => $request->getHost(),
-      'xfh'  => $request->header('X-Forwarded-Host'),
-      'cid'  => $clientId,
-    ]);
-
-    $vouchers = \App\Models\HotspotVoucher::forClient($clientId)
-      ->where('is_active', true)
-      ->orderBy('price')
-      ->get();
+    $vouchers = \App\Models\HotspotVoucher::listForPortal($clientId);
 
     return view('hotspot.index', [
       'vouchers' => $vouchers,
