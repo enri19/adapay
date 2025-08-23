@@ -10,7 +10,7 @@ class Payment extends Model
   use HasFactory;
 
   protected $fillable = [
-    'order_id','provider','provider_ref','amount','currency','status','qr_string','raw','paid_at'
+    'order_id','client_id','provider','provider_ref','amount','currency','status','qr_string','raw','paid_at'
   ];
 
   protected $casts = [

@@ -42,7 +42,6 @@
 @push('scripts')
 <script>
 (function(){
-  console.log("{{ $resolvedClientId ?? 'DEFAULT' }}");
   function setLoading(btn,on,txt){
     if(!btn) return;
     const label = btn.querySelector('.btn__label');
@@ -56,16 +55,22 @@
     }
   }
 
+  // Ambil client dari subdomain atau ?client=
   function getClientIdFromHost(){
-    // subdomain: c1.pay.adanih.info -> C1
-    var h = location.hostname.split('.');
-    if (h.length > 2) {
-      return (h[0] || 'DEFAULT').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12) || 'DEFAULT';
+    const parts = location.hostname.split('.');
+    if (parts.length > 2) {
+      return (parts[0] || 'DEFAULT').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12) || 'DEFAULT';
     }
-    // fallback: ?client=C1
-    var q = new URLSearchParams(location.search).get('client') || 'DEFAULT';
+    const q = new URLSearchParams(location.search).get('client') || 'DEFAULT';
     return q.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);
   }
+
+  // SET hidden client_id saat halaman load (override nilai server bila subdomain ada)
+  document.addEventListener('DOMContentLoaded', function(){
+    const hid = document.getElementById('client_id');
+    const cid = getClientIdFromHost();
+    if (hid) hid.value = cid;
+  });
 
   const payBtn = document.getElementById('payBtn');
   const errBox = document.getElementById('payErr');
@@ -74,18 +79,25 @@
     e.preventDefault();
     errBox.classList.add('hidden'); errBox.textContent = '';
 
-    // ambil data form dengan tipe yang tepat
+    // Ambil data form
     const form = new FormData(document.getElementById('frm'));
+
+    // Pastikan client_id selalu dari domain/query
+    const cid = getClientIdFromHost();
+    form.set('client_id', cid);
+    const hid = document.getElementById('client_id'); if (hid) hid.value = cid;
+
     const payload = {
       voucher_id: Number(form.get('voucher_id')),
       method: (form.get('method') || 'qris').toLowerCase(),
       name: form.get('name') || null,
       email: form.get('email') || null,
       phone: form.get('phone') || null,
-      client_id: form.get('client_id') || null,
+      client_id: cid,
     };
 
-    console.log(payload); return;
+    // HAPUS debug stop:
+    // console.log(payload); return;
 
     setLoading(payBtn, true, 'Memproses…');
     try{
@@ -95,7 +107,6 @@
         body: JSON.stringify(payload)
       });
 
-      // parse aman (antisipasi HTML error)
       const text = await res.text();
       let data; try{ data = JSON.parse(text); }catch{
         throw new Error('RESP_INVALID: ' + text.slice(0,120));
@@ -106,7 +117,7 @@
         let msg = data.message || 'Gagal membuat transaksi.';
         if(code==='UPSTREAM_TEMPORARY') msg = 'Channel pembayaran sedang gangguan (sandbox). Coba lagi.';
         if(code==='CHANNEL_INACTIVE')  msg = 'Channel belum aktif di dashboard Midtrans.';
-        if(code==='POP_REQUIRED')       msg = 'Akun butuh PoP/aktivasi tambahan di Midtrans.';
+        if(code==='POP_REQUIRED')      msg = 'Akun butuh PoP/aktivasi tambahan di Midtrans.';
         throw new Error(msg);
       }
 
