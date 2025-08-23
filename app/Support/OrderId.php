@@ -6,9 +6,11 @@ use Illuminate\Support\Str;
 
 class OrderId
 {
-  public static function sanitizeClient($client): string {
-    $c = strtoupper(preg_replace('/[^A-Z0-9]/i', '', (string)$client));
-    return substr($c ?: 'DEFAULT', 0, 12); // batas aman 12 char
+  public static function sanitizeClient(?string $v): string
+  {
+    $v = strtoupper((string)$v);
+    $v = preg_replace('/[^A-Z0-9]/', '', $v);
+    return $v ?: 'DEFAULT';
   }
 
   public static function make($client): string {

@@ -39,8 +39,13 @@ class ClientResolver
   public static function san(?string $v): ?string
   {
     if ($v === null) return null;
-    $v = strtoupper(preg_replace('/[^A-Z0-9]/', '', $v));
+    $v = trim($v);
     if ($v === '') return null;
-    return substr($v, 0, 12);
+
+    // IZINKAN A-Z dan 0-9, huruf dipertahankan!
+    $v = strtoupper($v);
+    $v = preg_replace('/[^A-Z0-9]/', '', $v);
+
+    return $v === '' ? null : substr($v, 0, 12);
   }
 }
