@@ -22,7 +22,7 @@ class ResolveClient
         $client = null;
 
         // 1) PRIORITAS: exact domain match
-        $client = Client::where('domain', $host)->first();
+        $client = Client::where('portal_domain', $host)->first();
 
         // 2) Kalau belum ketemu: tebak slug dari label pertama (subdomain)
         if (!$client && count($labels) >= 3) {
