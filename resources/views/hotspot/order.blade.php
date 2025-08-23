@@ -81,16 +81,27 @@
     const gopayQr = document.getElementById('gopayQr');
 
     let deeplinkUrl = null;
+    let pollId = null;          // <- id interval
+    let finished = false;       // <- sudah paid?
+
+    function stopPolling(){
+      if (pollId){ clearInterval(pollId); pollId = null; }
+    }
+    function lockPaymentUi(){
+      refreshQris && refreshQris.setAttribute('disabled','disabled');
+      openBtn && openBtn.setAttribute('disabled','disabled');
+      copyBtn && copyBtn.setAttribute('disabled','disabled');
+    }
 
     // tombol: open tanpa loading
     if (openBtn) openBtn.addEventListener('click', function(){
-      if (!deeplinkUrl){ err.classList.remove('hidden'); return; }
+      if (!deeplinkUrl || finished){ err.classList.remove('hidden'); return; }
       window.open(deeplinkUrl, '_blank', 'noopener');
     });
 
     // tombol: copy dengan ceklis hijau
     if (copyBtn) copyBtn.addEventListener('click', async function(){
-      if (!deeplinkUrl){ err.classList.remove('hidden'); return; }
+      if (!deeplinkUrl || finished){ err.classList.remove('hidden'); return; }
       const label = copyBtn.querySelector('.btn__label');
       const old = label ? label.textContent : null;
       try{
@@ -104,8 +115,9 @@
       }
     });
 
-    // refresh QRIS
+    // refresh QRIS manual (nonaktif saat paid)
     if (refreshQris) refreshQris.addEventListener('click', function(){
+      if (finished) return;
       if (!qrisImg) return;
       qrisErr.classList.add('hidden');
       qrisImg.src = '/api/payments/'+orderId+'/qris.png?ts=' + Date.now();
@@ -120,21 +132,24 @@
       const kind = String(d.kind || '').toLowerCase();
       const acts = d.actions ? d.actions : (d.raw && d.raw.actions ? d.raw.actions : null);
 
+      // Normalisasi status
+      const norm = String(d.status || d.transaction_status || '').toUpperCase();
+      const rawTx = String(d.raw && d.raw.transaction_status || '').toLowerCase();
+      const isPaidish = norm === 'PAID' || ['settlement','capture','success'].includes(rawTx);
+
       // --- QRIS ---
       const isQris = (payType === 'qris') || (kind === 'qris') || !!d.qr_string;
       if (isQris){
-        // tampilkan QRIS, sembunyikan e-wallet
         qrisBox.classList.remove('hidden');
         eBox.classList.add('hidden');
 
-        // load QRIS png dari server
-        qrisErr.classList.add('hidden');
-        qrisImg.onload = function(){ qrisErr.classList.add('hidden'); };
-        qrisImg.onerror = function(){ qrisErr.classList.remove('hidden'); };
-        // set ulang setiap loadPayment (cache-buster)
-        qrisImg.src = '/api/payments/'+orderId+'/qris.png?ts=' + Date.now();
+        if (!finished){ // jangan refresh gambar lagi kalau sudah paid
+          qrisErr.classList.add('hidden');
+          qrisImg.onload = function(){ qrisErr.classList.add('hidden'); };
+          qrisImg.onerror = function(){ qrisErr.classList.remove('hidden'); };
+          qrisImg.src = '/api/payments/'+orderId+'/qris.png?ts=' + Date.now();
+        }
       } else {
-        // --- E-wallet (GoPay / ShopeePay) ---
         eBox.classList.remove('hidden');
         qrisBox.classList.add('hidden');
 
@@ -160,7 +175,7 @@
           gopayQr.classList.add('hidden');
         } else {
           ttl.textContent = 'Bayar dengan GoPay';
-          if (hasQr){
+          if (hasQr && !finished){
             hint.classList.add('hidden');
             gopayQr.onload  = function(){ gopayQr.classList.remove('hidden'); };
             gopayQr.onerror = function(){ err.classList.remove('hidden'); gopayQr.classList.add('hidden'); };
@@ -177,14 +192,17 @@
         }
       }
 
-      statusEl.textContent = 'Status: ' + (d.status || d.transaction_status || 'pending');
+      statusEl.textContent = 'Status: ' + (norm || 'PENDING');
 
-      // kalau sudah paid, minta kredensial
-      if ((d.status||'').toUpperCase() === 'PAID') {
+      // --- jika sudah paid: stop polling & tampilkan kredensial, kunci UI ---
+      if (isPaidish && !finished) {
+        finished = true;
+        stopPolling();
+        lockPaymentUi();
         try {
           const r2 = await fetch('/api/hotspot/credentials/'+orderId, {headers:{'Accept':'application/json'}});
           const c = await r2.json();
-          if (c.ready){
+          if (c && c.ready){
             document.getElementById('credBox').classList.remove('hidden');
             document.getElementById('u').textContent = c.username;
             document.getElementById('p').textContent = c.password;
@@ -194,9 +212,9 @@
       }
     }
 
-    // pertama & polling ringan
+    // run pertama & mulai polling
     loadPayment();
-    setInterval(loadPayment, 5000);
+    pollId = setInterval(loadPayment, 5000);
   });
 })();
 </script>
