@@ -18,6 +18,12 @@ class HotspotController extends Controller
   {
     $clientId = \App\Support\ClientResolver::resolve($request);
 
+    \Log::debug('client_resolve', [
+      'host' => $request->getHost(),
+      'xfh'  => $request->header('X-Forwarded-Host'),
+      'cid'  => $clientId,
+    ]);
+
     $vouchers = \App\Models\HotspotVoucher::forClient($clientId)
       ->where('is_active', true)
       ->orderBy('price')
