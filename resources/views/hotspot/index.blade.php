@@ -31,8 +31,8 @@
         <input name="name" id="fldName" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="Nama lengkap" required minlength="2" pattern=".*\S.*">
         <p id="errName" class="text-xs text-red-600 mt-1 hidden"></p>
       </div>
+      <input name="phone" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="HP/WA (opsional)">
       <input name="email" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="Email (opsional)" type="email">
-      <input name="phone" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="HP (opsional)">
     </div>
 
     {{-- Metode --}}
