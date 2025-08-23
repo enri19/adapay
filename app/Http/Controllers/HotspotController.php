@@ -16,15 +16,16 @@ class HotspotController extends Controller
 {
   public function index(\Illuminate\Http\Request $request)
   {
-    // ambil dari middleware ResolveClient atau dari host
-    $clientId = strtoupper((string)($request->session()->get('client_id') ?: 'DEFAULT'));
+    $clientId = \App\Support\ClientResolver::resolve($request);
+
     $vouchers = \App\Models\HotspotVoucher::forClient($clientId)
+      ->where('is_active', true)
       ->orderBy('price')
       ->get();
 
     return view('hotspot.index', [
       'vouchers' => $vouchers,
-      'resolvedClientId' => $clientId,
+      'resolvedClientId' => $clientId, // supaya hidden input di Blade terisi
     ]);
   }
 
@@ -44,23 +45,14 @@ class HotspotController extends Controller
       'client_id' => 'nullable|string|max:32',
     ]);
 
-    // 1) dari payload
-    $clientId = \App\Support\OrderId::sanitizeClient($data['client_id'] ?? '');
+    // SELALU resolve dari host/URL (abaikan session)
+    $clientId = \App\Support\ClientResolver::resolve($request);
 
-    // 2) fallback dari subdomain
-    if (!$clientId) {
-      $host = $request->getHost(); // c1.pay.adanih.info
-      if (substr_count($host, '.') >= 2) {
-        $first = explode('.', $host)[0] ?? '';
-        $clientId = \App\Support\OrderId::sanitizeClient($first);
-      }
-    }
-
-    if (!$clientId) $clientId = 'DEFAULT';
-
-    // Ambil voucher yang hanya boleh milik client terkait (atau global)
-    $voucher = HotspotVoucher::where('id', (int)$data['voucher_id'])
+    // pastikan voucher milik client ini (atau global)
+    $voucher = \App\Models\HotspotVoucher::query()
+      ->where('id', (int)$data['voucher_id'])
       ->forClient($clientId)
+      ->where('is_active', true)
       ->first();
 
     if (!$voucher) {
