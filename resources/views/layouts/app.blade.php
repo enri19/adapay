@@ -71,9 +71,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 
-    <!-- Alpine (opsional untuk menu mobile) -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-
     <style>
       /* Haluskan tampilan */
       body { font-feature-settings: "cv02","cv03","cv04","cv11"; }
@@ -82,25 +79,20 @@
   </head>
   <body class="bg-gray-50 text-gray-800">
     <header class="border-b bg-white/90 backdrop-blur sticky top-0 z-40">
+      @php
+        // hanya sembunyikan di halaman persis /hotspot (bukan subpath)
+        $showBuy = !request()->is('hotspot');
+      @endphp
       <div class="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
         <a href="{{ url('/hotspot') }}" class="flex items-center gap-2">
           <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-blue-600 text-white font-semibold">HS</span>
           <span class="font-semibold">{{ config('app.name', 'Hotspot Portal') }}</span>
         </a>
-        <nav class="hidden md:flex items-center gap-4">
-          <a href="{{ url('/hotspot') }}" class="text-sm hover:text-blue-600">Beli Voucher</a>
-        </nav>
-        <div class="md:hidden" x-data="{open:false}">
-          <button class="p-2 rounded-lg hover:bg-gray-100" @click="open=!open" aria-label="Menu">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <div x-show="open" @click.outside="open=false" class="absolute left-0 right-0 top-14 bg-white border-b md:hidden">
-            <a href="{{ url('/hotspot') }}" class="block px-4 py-3 text-sm hover:bg-gray-50">Beli Voucher</a>
-          </div>
-        </div>
+
+        {{-- TANPA toggle bar; tombol selalu ada kecuali di /hotspot --}}
+        @if ($showBuy)
+          <a href="{{ url('/hotspot') }}" class="btn btn--primary">Beli Voucher</a>
+        @endif
       </div>
     </header>
 
