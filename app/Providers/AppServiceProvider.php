@@ -3,6 +3,9 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use App\Services\Mikrotik\MikrotikClient;
+use App\Services\Mikrotik\RouterOSClient;
+use App\Services\Mikrotik\NullMikrotikClient;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -13,8 +16,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        $this->app->bind(\App\Services\Mikrotik\MikrotikClient::class, function () {
-            return new \App\Services\Mikrotik\NullMikrotikClient();
+        $driver = config('mikrotik.driver', env('MIKROTIK_DRIVER', 'routeros'));
+
+        $this->app->bind(MikrotikClient::class, function () use ($driver) {
+            return $driver === 'routeros'
+                ? new RouterOSClient()   // <- driver beneran
+                : new NullMikrotikClient();
         });
     }
 

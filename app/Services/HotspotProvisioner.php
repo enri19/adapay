@@ -138,9 +138,10 @@ class HotspotProvisioner
       'limit'     => $limitUptime,
     ]);
 
+    Log::info('Mikrotik client class', ['class' => get_class($client)]);
+
     // Jika push belum diaktifkan, selesai di sini (log-only)
     if (!$router || empty($router['enable_push'])) {
-      Log::info('Client not provision');
       return;
     }
 
