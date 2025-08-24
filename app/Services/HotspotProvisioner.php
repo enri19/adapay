@@ -140,6 +140,7 @@ class HotspotProvisioner
 
     // Jika push belum diaktifkan, selesai di sini (log-only)
     if (!$router || empty($router['enable_push'])) {
+      Log::info('Client not provision');
       return;
     }
 
