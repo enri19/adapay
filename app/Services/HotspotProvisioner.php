@@ -118,66 +118,87 @@ class HotspotProvisioner
    */
   public function pushToMikrotik(HotspotUser $u): void
   {
-    $order = HotspotOrder::where('order_id', $u->order_id)->with('voucher')->first();
-    $clientId = $this->resolveClientId($u->order_id, $order);
-    $router = $this->resolveRouter($clientId);
+      $order    = HotspotOrder::where('order_id', $u->order_id)->with('voucher')->first();
+      $clientId = $this->resolveClientId($u->order_id, $order);
+      $router   = $this->resolveRouter($clientId);
 
-    $limitUptime = $u->duration_minutes . 'm';
-    $voucherCode = $order && $order->voucher
-      ? ($order->voucher->code ?? $order->voucher->name ?? '')
-      : '';
-    $comment = 'Voucher ' . $voucherCode . ' via order ' . $u->order_id . ' [' . $clientId . ']';
+      $limitUptime = $u->duration_minutes . 'm';
+      $voucherCode = $order && $order->voucher
+          ? ($order->voucher->code ?? $order->voucher->name ?? '')
+          : '';
+      $comment = 'Voucher ' . $voucherCode . ' via order ' . $u->order_id . ' [' . $clientId . ']';
 
-    // Selalu log rencana push
-    Log::info('Hotspot user create (plan)', [
-      'order_id'  => $u->order_id,
-      'client_id' => $clientId,
-      'router'    => $router ? ($router['host'] ?? 'n/a') : 'n/a',
-      'username'  => $u->username,
-      'profile'   => $u->profile,
-      'limit'     => $limitUptime,
-    ]);
+      Log::info('Hotspot user create (plan)', [
+          'order_id'  => $u->order_id,
+          'client_id' => $clientId,
+          'router'    => $router ? ($router['host'] ?? 'n/a') : 'n/a',
+          'username'  => $u->username,
+          'profile'   => $u->profile,
+          'limit'     => $limitUptime,
+      ]);
 
-    // Jika push belum diaktifkan, selesai di sini (log-only)
-    if (!$router || empty($router['enable_push'])) {
-      return;
-    }
-
-    try {
-      // Siapkan client Mikrotik dinamis
-      $client = $this->mt;
-
-      if (method_exists($this->mt, 'withConfig')) {
-        $maybe = $this->mt->withConfig([
-          'host' => $router['host'] ?? null,
-          'port' => $router['port'] ?? 8728,
-          'user' => $router['user'] ?? null,
-          'pass' => $router['pass'] ?? null,
-        ]);
-        if ($maybe) $client = $maybe;
-      } elseif (method_exists($this->mt, 'connect')) {
-        $client->connect(
-          $router['host'] ?? null,
-          (int) ($router['port'] ?? 8728),
-          $router['user'] ?? null,
-          $router['pass'] ?? null
-        );
-      } elseif (method_exists(app(), 'makeWith')) {
-        try {
-          $client = app()->makeWith(MikrotikClient::class, ['config' => $router]);
-        } catch (\Throwable $e) {
-          // fallback tetap pakai $this->mt
-        }
+      // Push dimatikan atau data router belum lengkap → jangan lanjut
+      if (!$router || empty($router['enable_push'])) {
+          Log::info('Client not provision (push disabled)');
+          return;
+      }
+      if (empty($router['host']) || empty($router['user']) || empty($router['pass'])) {
+          Log::warning('Router config incomplete', ['client_id' => $clientId, 'router' => $router]);
+          return;
       }
 
-      $client->createHotspotUser($u->username, $u->password, $u->profile, $comment, $limitUptime);
-      Log::info('Mikrotik push success', ['order_id' => $u->order_id, 'client_id' => $clientId]);
-    } catch (\Throwable $e) {
-      Log::error('Mikrotik push failed', [
-        'order_id'  => $u->order_id,
-        'client_id' => $clientId,
-        'err'       => $e->getMessage(),
-      ]);
-    }
+      try {
+          // Selalu mulai dari instance yang sudah di-inject
+          $mtClient = $this->mt;
+
+          // Prefer withConfig() kalau tersedia (return instance baru)
+          if (is_object($mtClient) && method_exists($mtClient, 'withConfig')) {
+              $maybe = $mtClient->withConfig([
+                  'host' => $router['host'],
+                  'port' => (int)($router['port'] ?? 8728),
+                  'user' => $router['user'],
+                  'pass' => $router['pass'],
+              ]);
+              if ($maybe) {
+                  $mtClient = $maybe;
+              }
+          }
+          // Kalau tidak ada withConfig() tapi ada connect(), panggil ke $this->mt lalu pakai object yang sama
+          elseif (is_object($mtClient) && method_exists($mtClient, 'connect')) {
+              $this->mt->connect(
+                  $router['host'],
+                  (int)($router['port'] ?? 8728),
+                  $router['user'],
+                  $router['pass']
+              );
+              $mtClient = $this->mt; // pastikan variabel terisi
+          }
+          // Terakhir, coba resolve via container dengan makeWith(config)
+          elseif (method_exists(app(), 'makeWith')) {
+              try {
+                  $mtClient = app()->makeWith(\App\Services\Mikrotik\MikrotikClient::class, ['config' => $router]);
+              } catch (\Throwable $e) {
+                  // tetap pakai $this->mt
+              }
+          }
+
+          Log::info('Mikrotik client class', ['class' => is_object($mtClient) ? get_class($mtClient) : gettype($mtClient)]);
+
+          // (Opsional) kalau driver punya ping/test, boleh panggil di sini
+          if (is_object($mtClient) && method_exists($mtClient, 'ping')) {
+              try { $mtClient->ping(); } catch (\Throwable $e) { /* abaikan */ }
+          }
+
+          // Buat / update user
+          $mtClient->createHotspotUser($u->username, $u->password, $u->profile, $comment, $limitUptime);
+
+          Log::info('Mikrotik push success', ['order_id' => $u->order_id, 'client_id' => $clientId]);
+      } catch (\Throwable $e) {
+          Log::error('Mikrotik push failed', [
+              'order_id'  => $u->order_id,
+              'client_id' => $clientId,
+              'err'       => $e->getMessage(),
+          ]);
+      }
   }
 }
