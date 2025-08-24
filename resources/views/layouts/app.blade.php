@@ -2,8 +2,12 @@
 <html lang="id">
   <style>
     /* Palet biru minimal */
-    :root {
-      --b-50:#eff6ff; --b-100:#dbeafe; --b-600:#2563eb; --b-700:#1d4ed8;
+    :root{
+      /* Primary selaras logo */
+      --b-50:#f0f9ff;
+      --b-100:#e0f2fe;
+      --b-600:#0284c7;   /* primary */
+      --b-700:#0369a1;   /* primary hover */
       --gray-200:#e5e7eb; --gray-700:#374151; --green-500:#10b981;
     }
 
@@ -55,6 +59,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}">
     <title>@yield('title', config('app.name', 'Hotspot Portal'))</title>
 
     <!-- Tailwind via CDN (cepat untuk prototipe) -->
@@ -85,7 +90,10 @@
       @endphp
       <div class="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
         <a href="{{ url('/hotspot') }}" class="flex items-center gap-2">
-          <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-blue-600 text-white font-semibold">HS</span>
+          <img src="{{ asset('images/logo.png') }}"
+              alt="{{ config('app.name', 'Hotspot Portal') }}"
+              class="h-8 w-auto object-contain"
+              onerror="this.replaceWith(document.createTextNode('Hotspot'))">
           <span class="font-semibold">{{ config('app.name', 'Hotspot Portal') }}</span>
         </a>
 
