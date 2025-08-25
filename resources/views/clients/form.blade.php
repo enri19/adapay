@@ -66,6 +66,18 @@
           <label class="label">Default Profile</label>
           <div class="control"><input class="input" name="default_profile" value="{{ old('default_profile',$client->default_profile ?? 'default') }}"></div>
         </div>
+        
+        <div>
+        <label class="label">Metode Login</label>
+          <div class="control">
+            <select class="select" name="auth_mode">
+              <option value="userpass" {{ old('auth_mode',$client->auth_mode ?? 'userpass')==='userpass'?'selected':'' }}>Username + Password</option>
+              <option value="code"     {{ old('auth_mode',$client->auth_mode ?? 'userpass')==='code'    ?'selected':'' }}>Kode Voucher (1 kolom)</option>
+            </select>
+          </div>
+          <div class="help">Jika "Kode Voucher", user & password di Mikrotik diset sama dengan kode.</div>
+        </div>
+
         <div>
           <label class="label">Enable Push</label>
           <div class="control">

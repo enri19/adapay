@@ -119,10 +119,13 @@ class HotspotController extends Controller
 
   public function credentials(string $orderId, HotspotProvisioner $prov)
   {
-    $user = $prov->provision($orderId) ?: HotspotUser::where('order_id', $orderId)->first();
+    $user = $prov->provision($orderId) ?: HotspotUser::where('order_id', $orderId)->first();  
     if (!$user) return response()->json(['ready' => false]);
+    $mode = ($user->username === $user->password) ? 'code' : 'userpass';
+
     return response()->json([
       'ready' => true,
+      'mode' => $mode,
       'username' => $user->username,
       'password' => $user->password,
       'profile' => $user->profile,

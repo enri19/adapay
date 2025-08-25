@@ -45,6 +45,12 @@
     <h2 class="font-medium mb-2">Akun Hotspot Kamu</h2>
     <p>Username: <code id="u"></code></p>
     <p>Password: <code id="p"></code></p>
+
+    <p class="text-xs text-gray-600 mt-2">
+      @verbatim
+      <span id="hintMode"></span>
+      @endverbatim
+    </p>
   </div>
 </div>
 
@@ -205,8 +211,19 @@
           if (c && c.ready){
             document.getElementById('credBox').classList.remove('hidden');
             document.getElementById('u').textContent = c.username;
-            document.getElementById('p').textContent = c.password;
-            statusEl.textContent = 'Akun siap dipakai.';
+            document.getElementById('p').textContent = (c.mode === 'code') ? '(sama dengan kode)' : c.password;
+            statusEl.textContent = 'Akun siap dipakai.' + (c.mode === 'code'
+              ? ' Gunakan kode sebagai USERNAME dan PASSWORD di halaman login.'
+              : ''
+            );
+
+            if (c.mode === 'code') {
+              document.getElementById('hintMode').textContent =
+                'Masukkan kode pada kolom Voucher. Jika halaman meminta Username & Password, isi keduanya dengan kode di atas.';
+            } else {
+              document.getElementById('hintMode').textContent =
+                'Masukkan sesuai yang tertera.';
+            }
           }
         } catch(e){}
       }
