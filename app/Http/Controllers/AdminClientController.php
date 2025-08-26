@@ -55,6 +55,7 @@ class AdminClientController extends Controller
       'router_pass'     => ['nullable','max:255'],
       'default_profile' => ['required','max:100'],
       'auth_mode'       => 'required|in:code,userpass',
+      'hotspot_portal'  => ['nullable', 'string', 'max:255'],
       'enable_push'     => ['sometimes','boolean'],
       'is_active'       => ['sometimes','boolean'],
     ]);

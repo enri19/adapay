@@ -17,6 +17,12 @@
       $p = is_array($creds ?? null) ? ($creds['p'] ?? null) : null;
       $infer = ($u && $p && strtoupper($u) === strtoupper($p)) ? 'code' : 'userpass';
       $mode = in_array($authMode, ['code','userpass'], true) ? $authMode : $infer;
+
+      // --- portal URL: controller ($hotspotPortal) -> model ($client->hotspot_portal) -> config fallback ---
+      /** @var \App\Models\Client|null $client */
+      $portalUrl = $hotspotPortal
+        ?? (isset($client) && $client ? ($client->hotspot_portal ?? null) : null)
+        ?? config('hotspot.portal_default');
     @endphp
 
     @if($status === 'PAID')
@@ -75,6 +81,24 @@
             </p>
           @endif
         </div>
+
+        {{-- Tombol ke halaman login hotspot --}}
+        @if(!empty($portalUrl))
+          <div class="mt-4">
+            <a href="{{ $portalUrl }}"
+               target="_blank" rel="noopener"
+               class="inline-flex items-center gap-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 px-3 py-2 text-sm font-medium">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M15 3h6v6"></path>
+                <path d="M10 14 21 3"></path>
+                <path d="M21 14v7H3V3h7"></path>
+              </svg>
+              Buka Halaman Login Hotspot
+            </a>
+            <p class="mt-1 text-xs text-gray-500">Pastikan perangkat sudah tersambung ke Wi-Fi hotspot agar portal bisa diakses.</p>
+          </div>
+        @endif
+
       @else
         <div class="text-sm">Menyiapkan akun hotspot…</div>
         <script>setTimeout(()=>location.reload(),1500)</script>
@@ -125,7 +149,6 @@
     btn.setAttribute('disabled','disabled');
     copyTextById(target)
       .then(function(){
-        // toggle ikon → ceklis sebentar
         var ok = btn.querySelector('.ic-ok');
         var ic = btn.querySelector('.ic:not(.ic-ok)');
         if (ok && ic){ ic.classList.add('hidden'); ok.classList.remove('hidden'); }

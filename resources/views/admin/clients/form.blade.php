@@ -79,6 +79,20 @@
         </div>
 
         <div>
+          <label class="label">Hotspot Portal</label>
+          <div class="control">
+            <input
+              class="input"
+              type="text"
+              id="hotspot_portal"
+              name="hotspot_portal"
+              value="{{ old('hotspot_portal', $client->hotspot_portal ?? '') }}"
+              placeholder="http://url.login.hotspot.kamu"
+            />
+          </div>
+        </div>
+
+        <div>
           <label class="label">Enable Push</label>
           <div class="control">
             <select class="select" name="enable_push">
