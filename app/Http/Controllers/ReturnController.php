@@ -43,10 +43,16 @@ class ReturnController extends Controller
       if ($u) { $prov->pushToMikrotik($u); $creds = ['u'=>$u->username,'p'=>$u->password]; }
     }
 
+    $order   = \App\Models\HotspotOrder::where('order_id',$orderId)->first();
+    $client  = $order ? \App\Models\Client::where('client_id',$order->client_id)->first() : null;
+
+    $authMode = $client ? $client->auth_mode : null;
+
     return view('payments.return', [
       'orderId' => $orderId,
       'status'  => $p->status,
       'creds'   => $creds,
+      'authMode'=> $authMode,
     ]);
   }
 }

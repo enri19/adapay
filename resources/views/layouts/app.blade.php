@@ -52,6 +52,15 @@
     /* Ikon ceklis untuk Copy link */
     .icon-check{ width:1rem; height:1rem; color:var(--green-500); }
 
+    .copy-btn{
+      display:inline-flex; align-items:center; gap:.25rem;
+      padding:.25rem .4rem; border:1px solid #e5e7eb; border-radius:.4rem;
+      background:#fff; color:#374151;
+    }
+    .copy-btn:hover{ background:#f9fafb }
+    .copy-btn[disabled]{ opacity:.6; cursor:not-allowed }
+    .ic{ width:16px; height:16px }
+
     .hidden{ display:none }
   </style>
 
