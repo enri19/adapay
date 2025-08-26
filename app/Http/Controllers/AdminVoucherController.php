@@ -6,7 +6,7 @@ use App\Models\Client;
 use App\Models\HotspotVoucher;
 use Illuminate\Http\Request;
 
-class VoucherController extends Controller
+class AdminVoucherController extends Controller
 {
   public function index(Request $r)
   {
@@ -31,14 +31,14 @@ class VoucherController extends Controller
 
     $clients = Client::orderBy('client_id')->get();
 
-    return view('vouchers.index', compact('rows','clients','client','q'));
+    return view('admin.vouchers.index', compact('rows','clients','client','q'));
   }
 
   public function create()
   {
     $voucher = new HotspotVoucher(['duration_minutes'=>60,'profile'=>'default','is_active'=>true]);
     $clients = \App\Models\Client::orderBy('client_id')->get();
-    return view('vouchers.form', compact('voucher','clients'));
+    return view('admin.vouchers.form', compact('voucher','clients'));
   }
 
   public function store(Request $r)
@@ -53,7 +53,7 @@ class VoucherController extends Controller
   public function edit(HotspotVoucher $voucher)
   {
     $clients = \App\Models\Client::orderBy('client_id')->get();
-    return view('vouchers.form', compact('voucher','clients'));
+    return view('admin.vouchers.form', compact('voucher','clients'));
   }
 
   public function update(Request $r, HotspotVoucher $voucher)

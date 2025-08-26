@@ -5,19 +5,19 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use Illuminate\Http\Request;
 
-class ClientController extends Controller
+class AdminClientController extends Controller
 {
   // Tambahkan middleware auth kalau perlu
   // public function __construct(){ $this->middleware('auth'); }
 
   public function index() {
     $clients = Client::orderBy('is_active','desc')->orderBy('client_id')->get();
-    return view('clients.index', compact('clients'));
+    return view('admin.clients.index', compact('clients'));
   }
 
   public function create() {
     $client = new Client(['router_port'=>8728, 'default_profile'=>'default', 'enable_push'=>false, 'is_active'=>true]);
-    return view('clients.form', compact('client'));
+    return view('admin.clients.form', compact('client'));
   }
 
   public function store(Request $r) {
@@ -27,7 +27,7 @@ class ClientController extends Controller
   }
 
   public function edit(Client $client) {
-    return view('clients.form', compact('client'));
+    return view('admin.clients.form', compact('client'));
   }
 
   public function update(Request $r, Client $client) {
@@ -54,6 +54,7 @@ class ClientController extends Controller
       'router_user'     => ['nullable','max:100'],
       'router_pass'     => ['nullable','max:255'],
       'default_profile' => ['required','max:100'],
+      'auth_mode'       => 'required|in:code,userpass',
       'enable_push'     => ['sometimes','boolean'],
       'is_active'       => ['sometimes','boolean'],
     ]);

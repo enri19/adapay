@@ -86,28 +86,51 @@ class HotspotProvisioner
       ->first();
     if (!$order) return null;
 
+    // sudah ada? langsung pakai
     $existing = HotspotUser::where('order_id', $orderId)->first();
     if ($existing) return $existing;
 
+    // hanya jika sudah PAID
     $payment = Payment::where('order_id', $orderId)->first();
     if (!$payment || $payment->status !== Payment::S_PAID) return null;
 
-    $username = 'hv-' . strtolower(Str::random(6));
-    $password = strtoupper(Str::random(8));
-    $profile  = $order->voucher->profile ?? 'default';
+    // --- baca mode dari clients.auth_mode ---
+    $client = \App\Models\Client::where('client_id', $order->client_id ?: 'DEFAULT')->first();
+    $mode = $client && isset($client->auth_mode) ? strtolower((string)$client->auth_mode) : 'code';
+    if (!in_array($mode, ['code','userpass'], true)) $mode = 'code';
 
-    return DB::transaction(function () use ($order, $username, $password, $profile) {
-      // idempotency guard bila ada racing: cek lagi di dalam TX
+    // --- generate kredensial (ALL UPPERCASE) ---
+    if ($mode === 'userpass') {
+      $username = 'HV-' . strtoupper(\Illuminate\Support\Str::random(6));
+      $password = strtoupper(\Illuminate\Support\Str::random(8));
+    } else {
+      // mode "code": username == password == KODE (tanpa karakter rancu)
+      $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // tanpakan I,O,0,1
+      $code = '';
+      for ($i = 0; $i < 8; $i++) {
+        $code .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+      }
+      $username = $code;
+      $password = $code;
+    }
+
+    $profile = ($order->voucher && $order->voucher->profile)
+      ? $order->voucher->profile
+      : (($client && isset($client->default_profile) && $client->default_profile) ? $client->default_profile : 'default');
+
+    return \Illuminate\Support\Facades\DB::transaction(function () use ($order, $username, $password, $profile) {
+      // idempotency guard bila ada racing
       $again = HotspotUser::where('order_id', $order->order_id)->lockForUpdate()->first();
       if ($again) return $again;
 
       return HotspotUser::create([
         'order_id'           => $order->order_id,
         'hotspot_voucher_id' => $order->hotspot_voucher_id,
-        'username'           => $username,
-        'password'           => $password,
+        'client_id'          => $order->client_id,
+        'username'           => strtoupper($username),
+        'password'           => strtoupper($password),
         'profile'            => $profile,
-        'duration_minutes'   => $order->voucher->duration_minutes,
+        'duration_minutes'   => $order->voucher ? $order->voucher->duration_minutes : null,
       ]);
     });
   }
