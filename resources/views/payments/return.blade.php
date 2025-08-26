@@ -17,9 +17,6 @@
       $p = is_array($creds ?? null) ? ($creds['p'] ?? null) : null;
       $infer = ($u && $p && strtoupper($u) === strtoupper($p)) ? 'code' : 'userpass';
       $mode = in_array($authMode, ['code','userpass'], true) ? $authMode : $infer;
-
-      // --- portal URL: controller ($hotspotPortal) -> model ($client->hotspot_portal) -> config fallback ---
-      /** @var \App\Models\Client|null $client */
       $portalUrl = $hotspotPortal
         ?? (isset($client) && $client ? ($client->hotspot_portal ?? null) : null)
         ?? config('hotspot.portal_default');

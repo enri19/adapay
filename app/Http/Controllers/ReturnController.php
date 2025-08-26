@@ -54,7 +54,8 @@ class ReturnController extends Controller
       'status'    => $p->status,
       'creds'     => $creds,
       'authMode'  => $authMode,
-      'portalUrl' => $portalUrl
+      'portalUrl' => $portalUrl,
+      'hotspotPortal' => $hotspotPortal
     ]);
   }
 }
