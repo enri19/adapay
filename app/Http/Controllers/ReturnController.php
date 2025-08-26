@@ -47,15 +47,14 @@ class ReturnController extends Controller
     $client  = $order ? \App\Models\Client::where('client_id',$order->client_id)->first() : null;
 
     $authMode = $client ? $client->auth_mode : null;
-    $portalUrl = $client ? $client->hotspot_portal : null;
+    $hotspotPortal = $client ? $client->hotspot_portal : null;
 
     return view('payments.return', [
       'orderId'   => $orderId,
       'status'    => $p->status,
       'creds'     => $creds,
       'authMode'  => $authMode,
-      'portalUrl' => $portalUrl,
-      'hotspotPortal' => $hotspotPortal
+      'hotspotPortal' => $hotspotPortal,
     ]);
   }
 }
