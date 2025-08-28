@@ -104,8 +104,10 @@ class HotspotController extends Controller
         ]
       );
 
-      return response()->json(['order_id' => $orderId, 'midtrans' => $resp], 201);
+      // [ADD] kirim invoice via WA (pakai private fungsi, tidak ubah logic lain)
+      $this->waSendInvoice($data, $orderId, $voucher, $resp);
 
+      return response()->json(['order_id' => $orderId, 'midtrans' => $resp], 201);
     } catch (\Throwable $e) {
       $msg = $e->getMessage();
       $code = 'CHECKOUT_FAILED'; $http = 502;
@@ -131,5 +133,74 @@ class HotspotController extends Controller
       'profile' => $user->profile,
       'duration_minutes' => $user->duration_minutes,
     ]);
+  }
+
+  /**
+   * Kirim invoice WA jika phone tersedia.
+   */
+  private function waSendInvoice(array $data, string $orderId, $voucher, array $resp): void
+  {
+    try {
+      if (empty($data['phone'])) {
+        return;
+      }
+      $to       = \App\Support\Phone::normalizePhone($data['phone']);
+      $orderUrl = url("/hotspot/order/{$orderId}");
+      $payUrl   = $this->extractPayActionUrl($resp) ?? $orderUrl;
+
+      $msg = $this->buildWaInvoiceMessage([
+        'order_id' => $orderId,
+        'voucher'  => $voucher->name ?? ("Voucher #{$voucher->id}"),
+        'amount'   => (int) $voucher->price,
+        'method'   => strtoupper($data['method'] ?? 'QRIS'),
+        'status'   => $resp['status'] ?? 'PENDING',
+        'pay_url'  => $payUrl,
+        'order_url'=> $orderUrl,
+      ]);
+
+      app(\App\Services\WhatsAppGateway::class)->send($to, $msg);
+      \Log::info('hotspot.invoice.whatsapp', compact('orderId', 'to'));
+    } catch (\Throwable $e) {
+      \Log::warning('hotspot.invoice.whatsapp_failed', ['order_id' => $orderId, 'err' => $e->getMessage()]);
+    }
+  }
+
+  private function extractPayActionUrl(array $resp): ?string
+  {
+    $candidates = [
+      $resp['actions']['redirect_url']    ?? null,
+      $resp['actions']['deeplink_url']    ?? null,
+      $resp['actions']['mobile_deeplink'] ?? null,
+      $resp['actions'][0]['url']          ?? null,
+      $resp['qr_url']                     ?? null,
+    ];
+    foreach ($candidates as $u) {
+      if (is_string($u) && strlen($u) > 8) {
+        return $u;
+      }
+    }
+    return null;
+  }
+
+  private function buildWaInvoiceMessage(array $d): string
+  {
+    $rp = fn(int $n) => 'Rp ' . number_format($n, 0, ',', '.');
+
+    return implode("\n", array_filter([
+      "*Invoice WiFi Hotspot*",
+      "Order ID : {$d['order_id']}",
+      "Produk   : {$d['voucher']}",
+      "Harga    : " . $rp($d['amount']),
+      "Metode   : {$d['method']}",
+      "Status   : {$d['status']}",
+      "",
+      "👉 Bayar/lihat instruksi:",
+      $d['pay_url'],
+      "",
+      "Pantau status order:",
+      $d['order_url'],
+      "",
+      "_Terima kasih_ 🙏",
+    ]));
   }
 }

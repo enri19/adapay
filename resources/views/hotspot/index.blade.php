@@ -55,7 +55,10 @@
         <input name="name" id="fldName" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="Nama lengkap" required minlength="2" pattern=".*\S.*">
         <p id="errName" class="text-xs text-red-600 mt-1 hidden"></p>
       </div>
-      <input name="phone" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="HP/WA (opsional)">
+      <div>
+        <input name="phone" id="fldPhone" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="No Whatsapp" required minlength="2" pattern=".*\S.*">
+        <p id="errPhone" class="text-xs text-red-600 mt-1 hidden"></p>
+      </div>
       <input name="email" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="Email (opsional)" type="email">
     </div>
 
@@ -142,9 +145,15 @@
     return q.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);
   }
 
+  function errElFor(input){
+    // fldName -> errName, fldPhone -> errPhone
+    const errId = (input?.id || '').replace(/^fld/, 'err');
+    return document.getElementById(errId);
+  }
+
   function showFieldError(input, msg){
-    const err = document.getElementById('errName');
-    if (!err) return;
+    const err = errElFor(input);
+    if (!err || !input) return;
     if (msg){
       err.textContent = msg;
       err.classList.remove('hidden');
@@ -159,17 +168,74 @@
     }
   }
 
-  // set hidden client_id saat load
+  // === Validators ===
+  function validateName(input){
+    const v = String(input?.value || '').trim();
+    if (v.length < 2) return 'Nama wajib diisi (min. 2 karakter).';
+    if (!/\S/.test(v)) return 'Nama tidak boleh hanya spasi.';
+    return '';
+  }
+
+  function normalizeIdPhone(raw){
+    const s = String(raw || '').trim();
+    if (!s) return { norm: '', digits: '', ok: false };
+
+    const plus62 = s.startsWith('+62');
+    const digits = s.replace(/\D+/g,''); // buang non-digit
+
+    let norm = digits;
+    if (plus62) {
+      norm = '62' + digits.slice(2);
+    } else if (digits.startsWith('62')) {
+      norm = digits;
+    } else if (digits.startsWith('0')) {
+      norm = '62' + digits.slice(1);
+    }
+
+    // aturan longgar: harus 62 + 8xxxxxxxx, panjang 10–15 digit total
+    const ok = /^62[0-9]{9,13}$/.test(norm) && /^62[8]/.test(norm);
+    return { norm, digits, ok };
+  }
+
+  function validatePhone(input){
+    const v = String(input?.value || '').trim();
+    if (!v) return { msg: 'No WhatsApp wajib diisi.', norm: '' };
+
+    const { norm, ok } = normalizeIdPhone(v);
+    if (!ok) {
+      return { msg: 'Format WA harus diawali 08 / 62 / +62 dan valid.', norm: '' };
+    }
+    return { msg: '', norm };
+  }
+
+  // set hidden client_id saat load + live validation
   document.addEventListener('DOMContentLoaded', function(){
     const hid = document.getElementById('client_id');
     const cid = getClientIdFromHost();
     if (hid) hid.value = cid;
 
-    // bersihkan error saat user mengetik
-    const nameInput = document.getElementById('fldName');
+    const nameInput  = document.getElementById('fldName');
+    const phoneInput = document.getElementById('fldPhone');
+
     if (nameInput){
       nameInput.addEventListener('input', function(){
-        if (nameInput.value.trim().length >= 2) showFieldError(nameInput, null);
+        const msg = validateName(nameInput);
+        showFieldError(nameInput, msg);
+      });
+      nameInput.addEventListener('blur', function(){
+        const msg = validateName(nameInput);
+        showFieldError(nameInput, msg);
+      });
+    }
+
+    if (phoneInput){
+      phoneInput.addEventListener('input', function(){
+        const { msg } = validatePhone(phoneInput);
+        showFieldError(phoneInput, msg);
+      });
+      phoneInput.addEventListener('blur', function(){
+        const { msg } = validatePhone(phoneInput);
+        showFieldError(phoneInput, msg);
       });
     }
   });
@@ -181,16 +247,26 @@
     e.preventDefault();
     errBox.classList.add('hidden'); errBox.textContent = '';
 
-    const formEl = document.getElementById('frm');
-    const nameInput = document.getElementById('fldName');
+    const formEl     = document.getElementById('frm');
+    const nameInput  = document.getElementById('fldName');
+    const phoneInput = document.getElementById('fldPhone');
 
-    // validasi: nama wajib & bukan spasi
-    const nameVal = (nameInput?.value || '').trim();
-    if (!nameVal || nameVal.length < 2){
-      showFieldError(nameInput, 'Nama wajib diisi (min. 2 karakter).');
+    // Validasi nama
+    const nameMsg = validateName(nameInput);
+    if (nameMsg){
+      showFieldError(nameInput, nameMsg);
       return false;
     } else {
       showFieldError(nameInput, null);
+    }
+
+    // Validasi phone
+    const { msg: phoneMsg, norm: phoneNorm } = validatePhone(phoneInput);
+    if (phoneMsg){
+      showFieldError(phoneInput, phoneMsg);
+      return false;
+    } else {
+      showFieldError(phoneInput, null);
     }
 
     // kumpulkan data
@@ -202,9 +278,9 @@
     const payload = {
       voucher_id: Number(form.get('voucher_id')),
       method: (form.get('method') || 'qris').toLowerCase(),
-      name: nameVal,
+      name: String(nameInput.value || '').trim(),
       email: form.get('email') || null,
-      phone: form.get('phone') || null,
+      phone: phoneNorm || String(phoneInput.value || '').trim(),
       client_id: cid,
     };
 
@@ -222,13 +298,13 @@
       }
 
       if(!res.ok){
-        // tangani 422 validasi server (mis. "The name field is required.")
         if (res.status === 422) {
-          const msg = (data && (data.message || (data.errors && (data.errors.name||[])[0]))) || 'Data tidak valid.';
-          // kalau error menyebut name
-          if ((data.errors && data.errors.name) || /name/i.test(String(msg))) {
-            showFieldError(nameInput, msg);
-          }
+          // tampilkan error spesifik field bila ada
+          const errs = (data && data.errors) || {};
+          if (errs.name && errs.name[0])  showFieldError(nameInput, errs.name[0]);
+          if (errs.phone && errs.phone[0]) showFieldError(phoneInput, errs.phone[0]);
+
+          const msg = data.message || errs.name?.[0] || errs.phone?.[0] || 'Data tidak valid.';
           throw new Error(msg);
         }
         const code = data.error || 'CHECKOUT_FAILED';
@@ -259,24 +335,20 @@
     const groups = Array.from(document.querySelectorAll('.pay-methods'));
 
     function setChecked(card){
-      // Uncheck semua kartu di SEMUA grup
       document.querySelectorAll('.pm-card').forEach(c=>{
         c.setAttribute('aria-checked','false');
         const r = c.querySelector('.pm-radio'); if (r) r.checked = false;
       });
-      // Check kartu terpilih
       card.setAttribute('aria-checked','true');
       const radio = card.querySelector('.pm-radio'); if (radio) radio.checked = true;
     }
 
-    // Init: pastikan yang checked di DOM tersinkron ke gaya
     const current = document.querySelector('.pm-radio:checked');
     if (current) {
       const card = current.closest('.pm-card');
       if (card) setChecked(card);
     }
 
-    // Delegasi click & keyboard di semua grup
     groups.forEach(group=>{
       group.addEventListener('click', function(e){
         const card = e.target.closest('.pm-card'); if(!card) return;

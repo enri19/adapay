@@ -103,29 +103,33 @@ class PaymentController extends Controller
 
   public function refreshStatus(string $orderId)
   {
-      $adapter = PaymentResolver::provider();
-      $raw = $adapter->getStatus($orderId);
+    $adapter = PaymentResolver::provider();
+    $raw = $adapter->getStatus($orderId);
 
-      $rawStatus = strtolower($raw['transaction_status'] ?? 'pending');
-      $incoming  = app(\App\Payments\Providers\MidtransAdapter::class)->normalizeStatus($rawStatus);
+    $rawStatus = strtolower($raw['transaction_status'] ?? 'pending');
+    $incoming  = app(\App\Payments\Providers\MidtransAdapter::class)->normalizeStatus($rawStatus);
 
-      $payment = Payment::where('order_id', $orderId)->first();
-      $merged  = Payment::mergeStatus($payment->status ?? null, $incoming);
+    $payment = Payment::where('order_id', $orderId)->first();
+    $merged  = Payment::mergeStatus($payment->status ?? null, $incoming);
 
-      $payment = Payment::updateOrCreate(
-          ['order_id' => $orderId],
-          [
-              'provider'     => 'midtrans',
-              'provider_ref' => $raw['transaction_id'] ?? null,
-              'amount'       => (int) ($raw['gross_amount'] ?? ($payment->amount ?? 0)),
-              'currency'     => 'IDR',
-              'status'       => $merged,
-              'raw'          => $raw,
-              'paid_at'      => in_array($rawStatus, ['capture','settlement','success'], true) ? now() : $payment->paid_at,
-          ]
-      );
+    $payment = Payment::updateOrCreate(
+      ['order_id' => $orderId],
+      [
+        'provider'     => 'midtrans',
+        'provider_ref' => $raw['transaction_id'] ?? null,
+        'amount'       => (int) ($raw['gross_amount'] ?? ($payment->amount ?? 0)),
+        'currency'     => 'IDR',
+        'status'       => $merged,
+        'raw'          => $raw,
+        'paid_at'      => in_array($rawStatus, ['capture','settlement','success'], true) ? now() : $payment->paid_at,
+      ]
+    );
 
-      return response()->json($payment);
+    if ($merged === 'PAID' && $prevStatus !== 'PAID') {
+      $this->waSendPaid($orderId);
+    }
+
+    return response()->json($payment);
   }
 
   public function createGopay(Request $request)
@@ -243,5 +247,61 @@ class PaymentController extends Controller
     return response($png, 200)
       ->header('Content-Type', 'image/png')
       ->header('Cache-Control', 'no-store, max-age=0');
+  }
+
+  private function waSendPaid(string $orderId): void
+  {
+    try {
+      $order = \App\Models\HotspotOrder::where('order_id', $orderId)->first();
+      if (!$order || !$order->buyer_phone) {
+        return;
+      }
+
+      $user = \App\Models\HotspotUser::where('order_id', $orderId)->first();
+      $to   = \App\Support\Phone::normalizePhone($order->buyer_phone);
+
+      // Jika kredensial sudah tersedia, kirimkan; kalau belum, kirim konfirmasi paid saja.
+      $msg = $user
+        ? $this->buildWaPaidWithCredsMessage($orderId, $user->username, $user->password, $user->profile, (int) $user->duration_minutes)
+        : $this->buildWaPaidSimpleMessage($orderId);
+
+      app(\App\Services\WhatsAppGateway::class)->send($to, $msg);
+      \Log::info('hotspot.paid.whatsapp', compact('orderId', 'to'));
+    } catch (\Throwable $e) {
+      \Log::warning('hotspot.paid.whatsapp_failed', ['order_id' => $orderId, 'err' => $e->getMessage()]);
+    }
+  }
+
+  private function buildWaPaidSimpleMessage(string $orderId): string
+  {
+    $orderUrl = url("/hotspot/order/{$orderId}");
+    return implode("\n", [
+      "*Pembayaran Berhasil ✅*",
+      "Order ID : {$orderId}",
+      "",
+      "Akun kamu sedang disiapkan.",
+      "Pantau di: {$orderUrl}",
+      "_Terima kasih_ 🙏",
+    ]);
+  }
+
+  private function buildWaPaidWithCredsMessage(string $orderId, string $username, string $password, ?string $profile, int $duration): string
+  {
+    $orderUrl = url("/hotspot/order/{$orderId}");
+    $dur = $duration ? "{$duration} menit" : '-';
+
+    return implode("\n", [
+      "*Pembayaran Berhasil ✅*",
+      "Order ID : {$orderId}",
+      "Profile  : {$profile} ({$dur})",
+      "",
+      "*Akun Hotspot Kamu*",
+      "Username : `{$username}`",
+      "Password : `{$password}`",
+      "",
+      "Kamu bisa login sekarang.",
+      "Cek kembali di: {$orderUrl}",
+      "_Terima kasih_ 🙏",
+    ]);
   }
 }
