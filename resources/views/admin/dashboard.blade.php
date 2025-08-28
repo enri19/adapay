@@ -27,7 +27,7 @@
   <div class="kpi">
     <div class="label">Clients aktif</div>
     <div class="value">{{ number_format($clientsActive) }}</div>
-    <div class="sub"><a href="{{ route('clients.index') }}">Kelola clients →</a></div>
+    <div class="sub"><a href="{{ route('admin.clients.index') }}">Kelola clients →</a></div>
   </div>
   <div class="kpi">
     <div class="label">Payments (24 jam)</div>

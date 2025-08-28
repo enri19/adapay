@@ -10,7 +10,7 @@
         <div class="help">Kelola daftar voucher per client</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
-        <form method="GET" action="{{ route('vouchers.index') }}" style="display:flex;gap:8px;align-items:center">
+        <form method="GET" action="{{ route('admin.vouchers.index') }}" style="display:flex;gap:8px;align-items:center">
           <div class="control">
             <select name="client_id" class="select">
               <option value="">Semua client</option>
@@ -24,7 +24,7 @@
           <div class="control"><input class="input" type="search" name="q" value="{{ $q }}" placeholder="Cari nama/kode/profil"></div>
           <button class="btn">Filter</button>
         </form>
-        <a href="{{ route('vouchers.create') }}" class="btn btn--primary">Tambah</a>
+        <a href="{{ route('admin.vouchers.create') }}" class="btn btn--primary">Tambah</a>
       </div>
     </div>
   </div>
@@ -56,8 +56,8 @@
               @else <span class="pill pill--off">Tidak</span> @endif
             </td>
             <td style="text-align:right;white-space:nowrap">
-              <a href="{{ route('vouchers.edit',$v) }}" class="btn btn--ghost">Edit</a>
-              <form action="{{ route('vouchers.destroy',$v) }}" method="POST" style="display:inline" onsubmit="return confirm('Hapus voucher ini?')">
+              <a href="{{ route('admin.vouchers.edit',$v) }}" class="btn btn--ghost">Edit</a>
+              <form action="{{ route('admin.vouchers.destroy',$v) }}" method="POST" style="display:inline" onsubmit="return confirm('Hapus voucher ini?')">
                 @csrf @method('DELETE')
                 <button class="btn">Hapus</button>
               </form>

@@ -47,7 +47,7 @@ class AdminVoucherController extends Controller
     $data['price'] = $this->parseNominal($data['price']);
 
     HotspotVoucher::create($data);
-    return redirect()->route('vouchers.index')->with('ok','Voucher dibuat.');
+    return redirect()->route('admin.vouchers.index')->with('ok','Voucher dibuat.');
   }
 
   public function edit(HotspotVoucher $voucher)
@@ -62,7 +62,7 @@ class AdminVoucherController extends Controller
     $data['price'] = $this->parseNominal($data['price']);
 
     $voucher->update($data);
-    return redirect()->route('vouchers.index')->with('ok','Voucher diupdate.');
+    return redirect()->route('admin.vouchers.index')->with('ok','Voucher diupdate.');
   }
 
   public function destroy(HotspotVoucher $voucher)

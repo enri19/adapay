@@ -6,7 +6,7 @@
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <h1 style="margin:0;font-size:1.25rem">{{ $voucher->exists ? 'Edit' : 'Tambah' }} Voucher</h1>
-      <a href="{{ route('vouchers.index') }}" class="btn btn--ghost">← Kembali</a>
+      <a href="{{ route('admin.vouchers.index') }}" class="btn btn--ghost">← Kembali</a>
     </div>
 
     @if ($errors->any())
@@ -18,7 +18,7 @@
       </div>
     @endif
 
-    <form method="POST" action="{{ $voucher->exists ? route('vouchers.update',$voucher) : route('vouchers.store') }}" class="form">
+    <form method="POST" action="{{ $voucher->exists ? route('admin.vouchers.update',$voucher) : route('admin.vouchers.store') }}" class="form">
       @csrf @if($voucher->exists) @method('PUT') @endif
 
       <div class="form-grid form-2">
@@ -78,7 +78,7 @@
           <span class="btn__label">Simpan</span>
           <span class="spinner hidden" aria-hidden="true"></span>
         </button>
-        <a href="{{ route('vouchers.index') }}" class="btn btn--ghost">Batal</a>
+        <a href="{{ route('admin.vouchers.index') }}" class="btn btn--ghost">Batal</a>
       </div>
     </form>
   </div>

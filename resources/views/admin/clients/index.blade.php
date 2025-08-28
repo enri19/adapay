@@ -8,7 +8,7 @@
       <div style="font-weight:700">Clients</div>
       <div class="help">Kelola router & profil per lokasi</div>
     </div>
-    <a href="{{ route('clients.create') }}" class="btn btn--primary">Tambah</a>
+    <a href="{{ route('admin.clients.create') }}" class="btn btn--primary">Tambah</a>
   </div>
 
   <div class="table-wrap">
@@ -43,8 +43,8 @@
               @else <span class="pill pill--off">Nonaktif</span> @endif
             </td>
             <td style="text-align:right;white-space:nowrap">
-              <a href="{{ route('clients.edit',$c) }}" class="btn btn--ghost">Edit</a>
-              <form action="{{ route('clients.destroy',$c) }}" method="POST" style="display:inline" onsubmit="return confirm('Hapus client ini?')">
+              <a href="{{ route('admin.clients.edit',$c) }}" class="btn btn--ghost">Edit</a>
+              <form action="{{ route('admin.clients.destroy',$c) }}" method="POST" style="display:inline" onsubmit="return confirm('Hapus client ini?')">
                 @csrf @method('DELETE')
                 <button class="btn">Hapus</button>
               </form>

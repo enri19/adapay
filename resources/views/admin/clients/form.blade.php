@@ -6,7 +6,7 @@
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <h1 style="margin:0;font-size:1.25rem">{{ $client->exists ? 'Edit' : 'Tambah' }} Client</h1>
-      <a href="{{ route('clients.index') }}" class="btn btn--ghost">← Kembali</a>
+      <a href="{{ route('admin.clients.index') }}" class="btn btn--ghost">← Kembali</a>
     </div>
 
     @if ($errors->any())
@@ -18,7 +18,7 @@
       </div>
     @endif
 
-    <form method="POST" action="{{ $client->exists ? route('clients.update',$client) : route('clients.store') }}" class="form">
+    <form method="POST" action="{{ $client->exists ? route('admin.clients.update',$client) : route('admin.clients.store') }}" class="form">
       @csrf @if($client->exists) @method('PUT') @endif
       @php $isEdit = $client->exists; @endphp
 
@@ -119,7 +119,7 @@
           <span class="btn__label">Simpan</span>
           <span class="spinner hidden" aria-hidden="true"></span>
         </button>
-        <a href="{{ route('clients.index') }}" class="btn btn--ghost">Batal</a>
+        <a href="{{ route('admin.clients.index') }}" class="btn btn--ghost">Batal</a>
       </div>
     </form>
   </div>

@@ -23,7 +23,7 @@ class AdminClientController extends Controller
   public function store(Request $r) {
     $data = $this->validateData($r);
     Client::create($data);
-    return redirect()->route('clients.index')->with('ok','Client dibuat');
+    return redirect()->route('admin.clients.index')->with('ok','Client dibuat');
   }
 
   public function edit(Client $client) {
@@ -33,7 +33,7 @@ class AdminClientController extends Controller
   public function update(Request $r, Client $client) {
     $data = $this->validateData($r, $client->id);
     $client->update($data);
-    return redirect()->route('clients.index')->with('ok','Client diupdate');
+    return redirect()->route('admin.clients.index')->with('ok','Client diupdate');
   }
 
   public function destroy(Client $client) {
