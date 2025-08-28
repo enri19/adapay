@@ -14,6 +14,59 @@ class ReturnController extends Controller
     if (property_exists(\Midtrans\Config::class, 'isSanitized')) \Midtrans\Config::$isSanitized = true;
   }
 
+  private function waSendPaid(string $orderId): void
+  {
+    try {
+      $order = \App\Models\HotspotOrder::where('order_id', $orderId)->first();
+      if (!$order || !$order->buyer_phone) return;
+
+      $user = \App\Models\HotspotUser::where('order_id', $orderId)->first();
+      $to   = \App\Support\Phone::normalizePhone($order->buyer_phone);
+
+      $msg = $user
+        ? $this->buildWaPaidWithCredsMessage($orderId, $user->username, $user->password, $user->profile, (int) $user->duration_minutes)
+        : $this->buildWaPaidSimpleMessage($orderId);
+
+      app(\App\Services\WhatsAppGateway::class)->send($to, $msg);
+      \Log::info('return.paid.whatsapp', compact('orderId', 'to'));
+    } catch (\Throwable $e) {
+      \Log::warning('return.paid.whatsapp_failed', ['order_id' => $orderId, 'err' => $e->getMessage()]);
+    }
+  }
+
+  private function buildWaPaidSimpleMessage(string $orderId): string
+  {
+    $orderUrl = url("/hotspot/order/{$orderId}");
+    return implode("\n", [
+      "*Pembayaran Berhasil ✅*",
+      "Order ID : {$orderId}",
+      "",
+      "Akun kamu sedang disiapkan.",
+      "Pantau di: {$orderUrl}",
+      "_Terima kasih_ 🙏",
+    ]);
+  }
+
+  private function buildWaPaidWithCredsMessage(string $orderId, string $username, string $password, ?string $profile, int $duration): string
+  {
+    $orderUrl = url("/hotspot/order/{$orderId}");
+    $dur = $duration ? "{$duration} menit" : '-';
+
+    return implode("\n", [
+      "*Pembayaran Berhasil ✅*",
+      "Order ID : {$orderId}",
+      "Profile  : {$profile} ({$dur})",
+      "",
+      "*Akun Hotspot Kamu*",
+      "Username : `{$username}`",
+      "Password : `{$password}`",
+      "",
+      "Kamu bisa login sekarang.",
+      "Cek kembali di: {$orderUrl}",
+      "_Terima kasih_ 🙏",
+    ]);
+  }
+
   public function show(Request $r, HotspotProvisioner $prov)
   {
     $orderId = $r->query('order_id');
@@ -41,6 +94,11 @@ class ReturnController extends Controller
       // Provision di sini juga (fallback) agar user langsung dapat akun
       $u = $prov->provision($orderId);
       if ($u) { $prov->pushToMikrotik($u); $creds = ['u'=>$u->username,'p'=>$u->password]; }
+    }
+
+    // [ADD] Jika terjadi transisi ke PAID, kirim WA di sini
+    if ($p->status === \App\Models\Payment::S_PAID && $prevStatus !== \App\Models\Payment::S_PAID) {
+      $this->waSendPaid($orderId);
     }
 
     $order   = \App\Models\HotspotOrder::where('order_id',$orderId)->first();

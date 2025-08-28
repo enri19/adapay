@@ -8,7 +8,7 @@ use App\Http\Controllers\EmoneyController;
 
 Route::post('/payments/qris', [PaymentController::class, 'createQris']);
 Route::get('/payments/{orderId}', [PaymentController::class, 'show']);
-Route::post('/payments/{orderId}/refresh', [PaymentController::class, 'refreshStatus']);
+// Route::post('/payments/{orderId}/refresh', [PaymentController::class, 'refreshStatus']);
 Route::post('/payments/gopay', [PaymentController::class, 'createGopay']);
 Route::post('/payments/ewallet', [EmoneyController::class, 'charge']);
 Route::get('/payments/{orderId}/ewallet/qr', [PaymentController::class, 'ewalletQr']);
