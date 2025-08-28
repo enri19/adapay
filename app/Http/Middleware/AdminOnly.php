@@ -9,7 +9,7 @@ class AdminOnly
 {
   public function handle($request, Closure $next)
   {
-    if (!Auth::check() || !Auth::user()->is_admin) {
+    if (!Auth::check()) {
       return redirect()->route('admin.login')->with('error','Silakan login admin.');
     }
     return $next($request);

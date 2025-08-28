@@ -1,6 +1,5 @@
 <?php
 
-// routes/web.php
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\HotspotController;
 use App\Http\Controllers\ReturnController;
@@ -12,6 +11,7 @@ use App\Http\Controllers\AdminOrderController;
 use App\Http\Controllers\AdminReportController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminHotspotUsersController;
+use App\Http\Controllers\AdminUserController;
 
 /**
  * Public
@@ -27,24 +27,27 @@ Route::get('/payments/return', [ReturnController::class, 'show'])->name('payment
 /**
  * Admin Auth
  */
-Route::get('/admin/login', [AdminAuthController::class, 'showLogin'])->name('admin.login');
-Route::post('/admin/login', [AdminAuthController::class, 'login'])->name('admin.login.post');
-Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
+Route::middleware('guest')->group(function () {
+  Route::get('/admin/login', [AdminAuthController::class, 'showLogin'])->name('admin.login');
+  Route::post('/admin/login', [AdminAuthController::class, 'login'])->name('admin.login.post');
+});
+Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->middleware('auth')->name('admin.logout');
 
 /**
- * Admin Area (uniform prefix + name)
+ * Admin Area
+ * - Semua user login boleh akses /admin (dashboard), data akan difilter di controller.
+ * - Resource/menu admin-only tetap dibatasi can:is-admin.
  */
-Route::prefix('admin')
-  ->middleware('admin')
-  ->as('admin.')
-  ->group(function () {
-    // Dashboard
-    Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
+Route::prefix('admin')->as('admin.')->middleware(['auth'])->group(function () {
+  // Dashboard: selalu menuju ke sini setelah login
+  Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
 
+  // === Admin-only ===
+  Route::middleware('can:is-admin')->group(function () {
     // Vouchers
     Route::resource('vouchers', AdminVoucherController::class)->except(['show']);
 
-    // Payments & Orders
+    // Payments & Orders (halaman admin)
     Route::get('/payments', [AdminPaymentController::class, 'index'])->name('payments.index');
     Route::get('/orders',   [AdminOrderController::class, 'index'])->name('orders.index');
 
@@ -64,4 +67,8 @@ Route::prefix('admin')
       Route::put('/{client}',        [AdminClientController::class, 'update'])->name('update');
       Route::delete('/{client}',     [AdminClientController::class, 'destroy'])->name('destroy');
     });
+
+    // Users Management
+    Route::resource('users', AdminUserController::class)->except(['show']);
   });
+});

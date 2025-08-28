@@ -7,9 +7,9 @@ use Illuminate\Support\Facades\Auth;
 
 class AdminAuthController extends Controller
 {
-  public function showLogin()
+  public function showLogin(Request $r)
   {
-    if (Auth::check() && Auth::user()->is_admin) {
+    if (Auth::check()) {
       return redirect()->route('admin.dashboard');
     }
     return view('admin.login');
@@ -20,18 +20,16 @@ class AdminAuthController extends Controller
     $data = $r->validate([
       'email' => 'required|email',
       'password' => 'required|string',
-      'remember' => 'nullable|boolean',
+      'remember' => 'nullable', // jangan pakai boolean, checkbox sering kirim "on"
     ]);
 
-    if (Auth::attempt(['email'=>$data['email'], 'password'=>$data['password']], (bool)($data['remember'] ?? false))) {
-      if (Auth::user()->is_admin) {
-        $r->session()->regenerate();
-        return redirect()->route('admin.dashboard');
-      }
-      Auth::logout();
+    $remember = $r->boolean('remember'); // handle "on"/"1"/true
+    if (Auth::attempt(['email' => $data['email'], 'password' => $data['password']], $remember)) {
+      $r->session()->regenerate();
+      return redirect()->route('admin.dashboard');
     }
 
-    return back()->withInput()->with('error','Email atau password salah / bukan admin.');
+    return back()->withInput()->with('error', 'Email atau password salah.');
   }
 
   public function logout(Request $r)
@@ -40,5 +38,16 @@ class AdminAuthController extends Controller
     $r->session()->invalidate();
     $r->session()->regenerateToken();
     return redirect()->route('admin.login')->with('ok','Anda telah logout.');
+  }
+
+  /**
+   * Kompatibel: isAdmin() method, atau role === 'admin'
+   */
+  private function userIsAdmin($user): bool
+  {
+    if (!$user) return false;
+    if (method_exists($user, 'isAdmin')) return (bool) $user->isAdmin();
+    if (isset($user->role)) return (string)$user->role === 'admin';
+    return false;
   }
 }

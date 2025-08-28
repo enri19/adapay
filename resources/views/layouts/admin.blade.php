@@ -175,11 +175,16 @@
 
       <nav class="nav">
         <a href="{{ route('admin.dashboard') }}"              class="{{ $is('admin.dashboard') }}">Dashboard</a>
-        <a href="{{ route('admin.clients.index') }}"          class="{{ $is('admin.clients.*') }}">Clients</a>
+        @if(auth()->check() && auth()->user()->isAdmin())
+          <a href="{{ route('admin.clients.index') }}"        class="{{ $is('admin.clients.*') }}">Clients</a>
+        @endif
         <a href="{{ route('admin.payments.index') }}"         class="{{ $is('admin.payments.*') }}">Payments</a>
         <a href="{{ route('admin.orders.index') }}"           class="{{ $is('admin.orders.*') }}">Orders</a>
         <a href="{{ route('admin.vouchers.index') }}"         class="{{ $is('admin.vouchers.*') }}">Vouchers</a>
         <a href="{{ route('admin.hotspot-users.index') }}"    class="{{ $is('admin.hotspot-users.*') }}">Hotspot Users</a>
+        @if(auth()->check() && auth()->user()->isAdmin())
+          <a href="{{ route('admin.users.index') }}"        class="{{ $is('admin.users.*') }}">Users</a>
+        @endif
       </nav>
     </aside>
 

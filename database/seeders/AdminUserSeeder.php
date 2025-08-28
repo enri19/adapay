@@ -3,15 +3,33 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 
 class AdminUserSeeder extends Seeder
 {
-  public function run(): void
+  public function run()
   {
-    User::updateOrCreate(
+    // Admin
+    User::firstOrCreate(
       ['email' => 'admin@example.com'],
-      ['name' => 'Admin', 'password' => bcrypt('admin123'), 'is_admin' => true]
+      [
+        'name' => 'Super Admin',
+        'password' => Hash::make('admin123'),
+        'role' => 'admin',
+        'client_id' => null,
+      ]
+    );
+
+    // User biasa (opsional set client_id kalau ada)
+    User::firstOrCreate(
+      ['email' => 'user@example.com'],
+      [
+        'name' => 'Regular User',
+        'password' => Hash::make('user12345'),
+        'role' => 'user',
+        'client_id' => 'DEFAULT', // set ke ID client kalau perlu
+      ]
     );
   }
 }
