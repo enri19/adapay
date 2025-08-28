@@ -11,6 +11,7 @@ use App\Http\Controllers\AdminPaymentController;
 use App\Http\Controllers\AdminOrderController;
 use App\Http\Controllers\AdminReportController;
 use App\Http\Controllers\AdminDashboardController;
+use App\Http\Controllers\AdminHotspotUsersController;
 
 Route::get('/', function () {
   return view('welcome');
@@ -35,6 +36,8 @@ Route::prefix('admin')->middleware('admin')->group(function () {
   
   Route::get('/payments/export', [AdminReportController::class,'paymentsExport'])->name('admin.payments.export');
   Route::get('/orders/export',   [AdminReportController::class,'ordersExport'])->name('admin.orders.export');
+
+  Route::get('/hotspot-users', [AdminHotspotUsersController::class, 'index'])->name('admin.hotspot-users.index');
 
   // clients CRUD (punya kamu sebelumnya)
   Route::name('clients.')->group(function(){

@@ -170,11 +170,12 @@
       </div>
 
       @php
-        $rname = optional(request()->route())->getName();
-        $isClients  = \Illuminate\Support\Str::startsWith((string)$rname, 'clients.');
-        $isVouchers = \Illuminate\Support\Str::startsWith((string)$rname, 'vouchers.');
-        $isPays     = \Illuminate\Support\Str::startsWith((string)$rname, 'admin.payments.');
-        $isOrders   = \Illuminate\Support\Str::startsWith((string)$rname, 'admin.orders.');
+        $rname          = optional(request()->route())->getName();
+        $isClients      = \Illuminate\Support\Str::startsWith((string)$rname, 'clients.');
+        $isVouchers     = \Illuminate\Support\Str::startsWith((string)$rname, 'vouchers.');
+        $isPays         = \Illuminate\Support\Str::startsWith((string)$rname, 'admin.payments.');
+        $isOrders       = \Illuminate\Support\Str::startsWith((string)$rname, 'admin.orders.');
+        $isHotspotUser  = \Illuminate\Support\Str::startsWith((string)$rname, 'admin.hotspot-users.');
       @endphp
 
       <nav class="nav">
@@ -183,6 +184,7 @@
         <a href="{{ route('admin.payments.index') }}" class="{{ $isPays?'active':'' }}">Payments</a>
         <a href="{{ route('admin.orders.index') }}"   class="{{ $isOrders?'active':'' }}">Orders</a>
         <a href="{{ route('vouchers.index') }}" class="{{ $isVouchers?'active':'' }}">Vouchers</a>
+        <a href="{{ route('admin.hotspot-users.index') }}" class="{{ $isHotspotUser?'active':'' }}">Hotspot Users</a>
       </nav>
     </aside>
 
