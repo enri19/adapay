@@ -5,23 +5,21 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Models\HotspotVoucher;
 use Illuminate\Http\Request;
+use App\Http\Controllers\Concerns\ResolvesRoleAndClient;
 
 class AdminVoucherController extends Controller
 {
+  use ResolvesRoleAndClient;
+
   public function index(Request $r)
   {
     $user = $r->user();
-    $isAdmin = $user && method_exists($user, 'isAdmin') ? $user->isAdmin() : false;
-
-    // Filter client: admin boleh pilih via query, user dipaksa ke miliknya
-    $clientParam = trim((string) $r->query('client_id', ''));
-    $client = $isAdmin ? strtoupper($clientParam) : $this->requireUserClientId($user);
-    $q = trim((string) $r->query('q', ''));
+    $isAdmin = $this->userIsAdmin($user);
+    $client = $this->resolveClientId($user, $r->query('client_id',''));
+    $q = trim((string) $r->query('q',''));
 
     $rows = HotspotVoucher::query()
-      ->when($client !== '', function($qq) use ($client){
-        $qq->where('client_id', $client);
-      })
+      ->when($client !== '', fn($qq) => $qq->where('client_id', $client))
       ->when($q !== '', function($qq) use ($q){
         $qq->where(function($w) use ($q){
           $w->where('name','like',"%$q%")
@@ -29,16 +27,11 @@ class AdminVoucherController extends Controller
             ->orWhere('profile','like',"%$q%");
         });
       })
-      ->orderBy('client_id')
-      ->orderBy('price')
-      ->paginate(20)
-      ->appends($r->only('client_id','q'));
+      ->orderBy('client_id')->orderBy('price')
+      ->paginate(20)->appends($r->only('client_id','q'));
 
-    // Daftar client: admin = semua; user = hanya miliknya
     $clientsQuery = Client::query()->orderBy('client_id');
-    if (!$isAdmin) {
-      $clientsQuery->where('client_id', $this->requireUserClientId($user));
-    }
+    if (!$isAdmin) $clientsQuery->where('client_id', $client);
     $clients = $clientsQuery->get();
 
     return view('admin.vouchers.index', compact('rows','clients','client','q'));
@@ -47,18 +40,12 @@ class AdminVoucherController extends Controller
   public function create(Request $r)
   {
     $user = $r->user();
-    $isAdmin = $user && method_exists($user, 'isAdmin') ? $user->isAdmin() : false;
+    $isAdmin = $this->userIsAdmin($user);
 
-    $voucher = new HotspotVoucher([
-      'duration_minutes'=>60,
-      'profile'=>'default',
-      'is_active'=>true
-    ]);
+    $voucher = new HotspotVoucher(['duration_minutes'=>60,'profile'=>'default','is_active'=>true]);
 
     $clientsQuery = Client::query()->orderBy('client_id');
-    if (!$isAdmin) {
-      $clientsQuery->where('client_id', $this->requireUserClientId($user));
-    }
+    if (!$isAdmin) $clientsQuery->where('client_id', $this->requireUserClientId($user));
     $clients = $clientsQuery->get();
 
     return view('admin.vouchers.form', compact('voucher','clients'));
@@ -67,13 +54,10 @@ class AdminVoucherController extends Controller
   public function store(Request $r)
   {
     $user = $r->user();
-    $isAdmin = $user && method_exists($user, 'isAdmin') ? $user->isAdmin() : false;
+    $isAdmin = $this->userIsAdmin($user);
 
     $data = $this->validated($r);
-    // Non-admin: paksa client_id ke miliknya
-    if (!$isAdmin) {
-      $data['client_id'] = $this->requireUserClientId($user);
-    }
+    if (!$isAdmin) $data['client_id'] = $this->requireUserClientId($user);
     $data['client_id'] = strtoupper((string) $data['client_id']);
     $data['price'] = $this->parseNominal($data['price']);
 
@@ -84,17 +68,11 @@ class AdminVoucherController extends Controller
   public function edit(Request $r, HotspotVoucher $voucher)
   {
     $user = $r->user();
-    $isAdmin = $user && method_exists($user, 'isAdmin') ? $user->isAdmin() : false;
-
-    // Non-admin hanya boleh mengedit milik client-nya
-    if (!$isAdmin && strtoupper((string)$voucher->client_id) !== $this->requireUserClientId($user)) {
+    if (!$this->userIsAdmin($user) && strtoupper((string)$voucher->client_id) !== $this->requireUserClientId($user)) {
       abort(403, 'Forbidden');
     }
-
-    $clientsQuery = \App\Models\Client::query()->orderBy('client_id');
-    if (!$isAdmin) {
-      $clientsQuery->where('client_id', $this->requireUserClientId($user));
-    }
+    $clientsQuery = Client::query()->orderBy('client_id');
+    if (!$this->userIsAdmin($user)) $clientsQuery->where('client_id', $this->requireUserClientId($user));
     $clients = $clientsQuery->get();
 
     return view('admin.vouchers.form', compact('voucher','clients'));
@@ -103,17 +81,14 @@ class AdminVoucherController extends Controller
   public function update(Request $r, HotspotVoucher $voucher)
   {
     $user = $r->user();
-    $isAdmin = $user && method_exists($user, 'isAdmin') ? $user->isAdmin() : false;
+    $isAdmin = $this->userIsAdmin($user);
 
     if (!$isAdmin && strtoupper((string)$voucher->client_id) !== $this->requireUserClientId($user)) {
       abort(403, 'Forbidden');
     }
 
     $data = $this->validated($r, $voucher->id);
-    if (!$isAdmin) {
-      // Non-admin tidak boleh pindah client; paksa tetap
-      $data['client_id'] = $this->requireUserClientId($user);
-    }
+    if (!$isAdmin) $data['client_id'] = $this->requireUserClientId($user);
     $data['client_id'] = strtoupper((string) $data['client_id']);
     $data['price'] = $this->parseNominal($data['price']);
 
@@ -124,12 +99,9 @@ class AdminVoucherController extends Controller
   public function destroy(Request $r, HotspotVoucher $voucher)
   {
     $user = $r->user();
-    $isAdmin = $user && method_exists($user, 'isAdmin') ? $user->isAdmin() : false;
-
-    if (!$isAdmin && strtoupper((string)$voucher->client_id) !== $this->requireUserClientId($user)) {
+    if (!$this->userIsAdmin($user) && strtoupper((string)$voucher->client_id) !== $this->requireUserClientId($user)) {
       abort(403, 'Forbidden');
     }
-
     $voucher->delete();
     return back()->with('ok','Voucher dihapus.');
   }
@@ -140,33 +112,16 @@ class AdminVoucherController extends Controller
       'client_id'        => ['required','string','max:12','regex:/^[A-Za-z0-9]+$/'],
       'name'             => ['required','string','max:120'],
       'code'             => ['nullable','string','max:120'],
-      'price'            => ['required'], // akan diparse ke integer
+      'price'            => ['required'],
       'duration_minutes' => ['required','integer','min:1','max:100000'],
       'profile'          => ['required','string','max:120'],
       'is_active'        => ['sometimes','boolean'],
     ]);
   }
 
-  private function userIsAdmin($user): bool
+  private function parseNominal($v): int
   {
-    if (!$user) return false;
-    if (method_exists($user, 'isAdmin')) return (bool) $user->isAdmin();
-    if (isset($user->role)) return (string) $user->role === 'admin';
-    return false;
-  }
-
-  private function requireUserClientId($user): string
-  {
-    // ADMIN: tidak perlu client filter → jangan abort, kembalikan '' agar query tidak di-filter client
-    if ($this->userIsAdmin($user)) {
-      return '';
-    }
-
-    // USER: wajib terikat client
-    $clientId = strtoupper((string) ($user->client_id ?? ''));
-    if ($clientId === '') {
-      abort(403, 'User belum terikat ke client.');
-    }
-    return $clientId;
+    $n = (int) preg_replace('/\D+/', '', (string) $v);
+    return max(0, $n);
   }
 }

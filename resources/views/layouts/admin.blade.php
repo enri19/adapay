@@ -147,6 +147,13 @@
       clip:rect(0,0,0,0); white-space:nowrap; border:0;
     }
 
+    /* user chip di header */
+    .userchip{display:flex;align-items:center;gap:.5rem;white-space:nowrap}
+    .userchip .name{font-weight:600;max-width:28ch;overflow:hidden;text-overflow:ellipsis}
+    @media (max-width:900px){
+      .userchip .name{max-width:16ch}
+    }
+
     /* ==== Mobile overrides - drawer & brand mini ==== */
     @media (max-width:900px){
       .only-mobile{display:inline-flex}
@@ -198,23 +205,35 @@
               <path d="M4 6h16M4 12h16M4 18h16"/>
             </svg>
           </button>
-
           <div>@yield('title','Admin')</div>
         </div>
 
-        <form method="POST" action="{{ route('admin.logout') }}">
-          @csrf
-          <button type="submit" class="icon-circle" title="Logout" aria-label="Logout">
-            {{-- ikon logout (box + arrow) --}}
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <path d="M16 17l5-5-5-5"/>
-              <path d="M21 12H9"/>
-            </svg>
-            <span class="sr-only">Logout</span>
-          </button>
-        </form>
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+          @auth
+            @php $u = auth()->user(); @endphp
+            <div class="userchip">
+              <span class="pill name">{{ $u->name }}</span>
+              @if(method_exists($u,'isAdmin') ? !$u->isAdmin() : (($u->role ?? '')!=='admin'))
+                @if($u->client_id)
+                  <span class="mono help">{{ $u->client_id }}</span>
+                @endif
+              @endif
+            </div>
+          @endauth
+
+          <form method="POST" action="{{ route('admin.logout') }}">
+            @csrf
+            <button type="submit" class="icon-circle" title="Logout" aria-label="Logout">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <path d="M16 17l5-5-5-5"/>
+                <path d="M21 12H9"/>
+              </svg>
+              <span class="sr-only">Logout</span>
+            </button>
+          </form>
+        </div>
       </header>
 
       <main class="main">
