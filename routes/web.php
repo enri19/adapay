@@ -42,22 +42,22 @@ Route::prefix('admin')->as('admin.')->middleware(['auth'])->group(function () {
   // Dashboard: selalu menuju ke sini setelah login
   Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
 
+  // Vouchers
+  Route::resource('vouchers', AdminVoucherController::class)->except(['show']);
+
+  // Payments & Orders (halaman admin)
+  Route::get('/payments', [AdminPaymentController::class, 'index'])->name('payments.index');
+  Route::get('/orders',   [AdminOrderController::class, 'index'])->name('orders.index');
+
+  // Reports / Export
+  Route::get('/payments/export', [AdminReportController::class, 'paymentsExport'])->name('payments.export');
+  Route::get('/orders/export',   [AdminReportController::class, 'ordersExport'])->name('orders.export');
+
+  // Hotspot Users
+  Route::get('/hotspot-users', [AdminHotspotUsersController::class, 'index'])->name('hotspot-users.index');
+
   // === Admin-only ===
   Route::middleware('can:is-admin')->group(function () {
-    // Vouchers
-    Route::resource('vouchers', AdminVoucherController::class)->except(['show']);
-
-    // Payments & Orders (halaman admin)
-    Route::get('/payments', [AdminPaymentController::class, 'index'])->name('payments.index');
-    Route::get('/orders',   [AdminOrderController::class, 'index'])->name('orders.index');
-
-    // Reports / Export
-    Route::get('/payments/export', [AdminReportController::class, 'paymentsExport'])->name('payments.export');
-    Route::get('/orders/export',   [AdminReportController::class, 'ordersExport'])->name('orders.export');
-
-    // Hotspot Users
-    Route::get('/hotspot-users', [AdminHotspotUsersController::class, 'index'])->name('hotspot-users.index');
-
     // Clients (CRUD)
     Route::prefix('clients')->as('clients.')->group(function () {
       Route::get('/',                [AdminClientController::class, 'index'])->name('index');
@@ -67,7 +67,7 @@ Route::prefix('admin')->as('admin.')->middleware(['auth'])->group(function () {
       Route::put('/{client}',        [AdminClientController::class, 'update'])->name('update');
       Route::delete('/{client}',     [AdminClientController::class, 'destroy'])->name('destroy');
     });
-
+    
     // Users Management
     Route::resource('users', AdminUserController::class)->except(['show']);
   });
