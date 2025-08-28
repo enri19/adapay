@@ -61,16 +61,45 @@
       <tbody>
         @forelse($rows as $p)
           @php
-            $raw = is_array($p->raw ?? null) ? $p->raw : (is_object($p->raw ?? null) ? (array)$p->raw : []);
-            $payType = strtoupper($raw['payment_type'] ?? ($p->provider ?? ''));
+            $raw = is_array($p->raw ?? null) ? $p->raw : (is_object($p->raw ?? null) ? (array) $p->raw : []);
+            $pt  = strtolower($raw['payment_type'] ?? '');
+            $channel = '';
+
+            // QRIS terdeteksi dari payment_type atau adanya qr_string
+            if (!empty($p->qr_string) || !empty($raw['qr_string']) || $pt === 'qris') {
+              $channel = 'QRIS';
+            }
+            // E-wallet langsung
+            elseif (in_array($pt, ['gopay','shopeepay'], true)) {
+              $channel = strtoupper($pt);
+            }
+            // Bank transfer: coba deteksi bank VA
+            elseif ($pt === 'bank_transfer') {
+              $bank = $raw['va_numbers'][0]['bank'] ?? (isset($raw['permata_va_number']) ? 'permata' : null);
+              $channel = $bank ? strtoupper($bank) . ' VA' : 'BANK TRANSFER';
+            }
+            // Kartu kredit / lainnya
+            elseif ($pt) {
+              $channel = strtoupper($pt);
+            } else {
+              // Fallback terakhir (jangan biarkan MIDTRANS menutupi channel)
+              // coba infer dari actions
+              $act = json_encode($raw['actions'] ?? []);
+              if (is_string($act)) {
+                if (stripos($act, 'gopay') !== false)      $channel = 'GOPAY';
+                elseif (stripos($act, 'shopee') !== false) $channel = 'SHOPEEPAY';
+              }
+              if (!$channel) $channel = strtoupper($p->provider ?? ''); // contoh: MIDTRANS
+            }
           @endphp
+
           <tr>
             <td>{{ optional($p->created_at)->timezone(config('app.timezone'))->format('Y-m-d H:i:s') }}</td>
             <td class="mono">{{ $p->order_id }}</td>
             <td class="mono">{{ $p->client_id ?: 'DEFAULT' }}</td>
             <td>Rp{{ number_format((int)$p->amount,0,',','.') }}</td>
             <td>{{ $p->currency ?: 'IDR' }}</td>
-            <td>{{ $payType }}</td>
+            <td>{{ $channel }}</td>
             <td>
               @if(strtoupper($p->status)==='PAID') <span class="pill pill--ok">PAID</span>
               @elseif(strtoupper($p->status)==='PENDING') <span class="pill">PENDING</span>
