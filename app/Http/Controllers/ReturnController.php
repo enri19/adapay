@@ -75,6 +75,8 @@ class ReturnController extends Controller
     $p = Payment::where('order_id', $orderId)->first();
     if (!$p) return view('payments.return', ['orderId'=>$orderId,'status'=>'UNKNOWN','creds'=>null]);
 
+    $prevStatus = $p->status; // [ADD] simpan status lama
+    
     // Pastikan status terbaru (fallback jika webhook belum sampai)
     $this->initMidtrans();
     try {
