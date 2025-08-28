@@ -14,6 +14,15 @@ class ReturnController extends Controller
     if (property_exists(\Midtrans\Config::class, 'isSanitized')) \Midtrans\Config::$isSanitized = true;
   }
 
+  private function getAuthModeForOrder(string $orderId): ?string
+  {
+    $order = \App\Models\HotspotOrder::where('order_id', $orderId)->first();
+    if (!$order) return null;
+
+    $client = \App\Models\Client::where('client_id', $order->client_id)->first();
+    return $client ? $client->auth_mode : null; // 'code' atau 'userpass' (atau null)
+  }
+
   private function waSendPaid(string $orderId): void
   {
     try {
@@ -23,14 +32,23 @@ class ReturnController extends Controller
       $user = \App\Models\HotspotUser::where('order_id', $orderId)->first();
       $to   = \App\Support\Phone::normalizePhone($order->buyer_phone);
 
+      $authMode = $this->getAuthModeForOrder($orderId) ?: 'userpass';
+
       $msg = $user
-        ? $this->buildWaPaidWithCredsMessage($orderId, $user->username, $user->password, $user->profile, (int) $user->duration_minutes)
+        ? $this->buildWaPaidWithCredsMessage(
+            $orderId,
+            $user->username,
+            $user->password,
+            $user->profile,
+            (int) $user->duration_minutes,
+            $authMode
+          )
         : $this->buildWaPaidSimpleMessage($orderId);
 
       app(\App\Services\WhatsAppGateway::class)->send($to, $msg);
-      \Log::info('return.paid.whatsapp', compact('orderId', 'to'));
+      \Log::info('paid.whatsapp', compact('orderId', 'to', 'authMode'));
     } catch (\Throwable $e) {
-      \Log::warning('return.paid.whatsapp_failed', ['order_id' => $orderId, 'err' => $e->getMessage()]);
+      \Log::warning('paid.whatsapp_failed', ['order_id' => $orderId, 'err' => $e->getMessage()]);
     }
   }
 
@@ -47,24 +65,48 @@ class ReturnController extends Controller
     ]);
   }
 
-  private function buildWaPaidWithCredsMessage(string $orderId, string $username, string $password, ?string $profile, int $duration): string
+  private function buildWaPaidWithCredsMessage(
+    string $orderId,
+    string $username,
+    string $password,
+    ?string $profile,
+    int $duration,
+    string $authMode = 'userpass'
+  ): string
   {
     $orderUrl = url("/hotspot/order/{$orderId}");
     $dur = $duration ? "{$duration} menit" : '-';
 
-    return implode("\n", [
+    $header = [
       "*Pembayaran Berhasil ✅*",
       "Order ID : {$orderId}",
       "Profile  : {$profile} ({$dur})",
-      "",
-      "*Akun Hotspot Kamu*",
-      "Username : `{$username}`",
-      "Password : `{$password}`",
+      ""
+    ];
+
+    $isCode = ($authMode === 'code') || ($username === $password);
+
+    $creds = $isCode
+      ? [
+          "*Kode Hotspot Kamu*",
+          "Kode : `{$username}`",
+          "",
+          "Gunakan kode tersebut sebagai *Username* dan *Password* saat login."
+        ]
+      : [
+          "*Akun Hotspot Kamu*",
+          "Username : `{$username}`",
+          "Password : `{$password}`"
+        ];
+
+    $footer = [
       "",
       "Kamu bisa login sekarang.",
       "Cek kembali di: {$orderUrl}",
       "_Terima kasih_ 🙏",
-    ]);
+    ];
+
+    return implode("\n", array_merge($header, $creds, $footer));
   }
 
   public function show(Request $r, HotspotProvisioner $prov)
