@@ -59,7 +59,9 @@
         <input name="phone" id="fldPhone" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="No Whatsapp" required minlength="2" pattern=".*\S.*">
         <p id="errPhone" class="text-xs text-red-600 mt-1 hidden"></p>
       </div>
-      <input name="email" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="Email (opsional)" type="email">
+      <div>
+        <input name="email" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="Email (opsional)" type="email">
+      </div>
     </div>
 
     {{-- Metode: QRIS (disarankan) --}}
