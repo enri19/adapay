@@ -31,10 +31,19 @@
 @endpush
 
 @section('content')
-<div class="container">
-  <div class="card" style="margin-bottom:12px">
+  <div class="container">
+    <div class="card" style="margin-bottom:12px">
     <div style="font-weight:700">Router & Hotspot Tools</div>
-    <div class="help">Client: <span class="mono">{{ $client->client_id }}</span> — {{ $client->name }}</div>
+    <div class="help">
+      Client: <span class="mono">{{ $client->client_id }}</span> — {{ $client->name }}
+      @isset($online)
+        @if($online)
+          <span class="pill pill--ok" style="margin-left:.5rem">Router Online</span>
+        @else
+          <span class="pill pill--off" style="margin-left:.5rem">Router Offline (pakai input manual)</span>
+        @endif
+      @endisset
+    </div>
   </div>
 
   <div class="form-grid form-2">
