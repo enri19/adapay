@@ -188,45 +188,37 @@ class AdminClientController extends Controller
   /**
    * Test login hotspot via API (butuh IP klien; MAC opsional).
    */
-  // Controller: ganti method ini seluruhnya
+  // Controller: routerHotspotLoginTest (final)
   public function routerHotspotLoginTest(Request $r, Client $client, MikrotikClient $mt)
   {
-    // Minimal: username/password; lalu EITHER client_ip OR client_mac
+    // View cukup kirim username & password (tanpa IP/MAC)
     $data = $r->validate([
-      'username'   => ['required','string','max:60'],
-      'password'   => ['required','string','max:120'],
-      'client_ip'  => ['nullable','ip','required_without:client_mac'],
-      'client_mac' => ['nullable','string','max:32','required_without:client_ip'],
+      'username' => ['required','string','max:60'],
+      'password' => ['required','string','max:120'],
     ], [
-      'username.required'            => 'Username wajib diisi.',
-      'password.required'            => 'Password wajib diisi.',
-      'client_ip.required_without'   => 'Isi IP klien atau MAC (salah satu).',
-      'client_mac.required_without'  => 'Isi MAC atau IP klien (salah satu).',
-      'client_ip.ip'                 => 'Format IP klien tidak valid.',
-    ], [
-      'client_ip'  => 'IP klien',
-      'client_mac' => 'MAC klien',
+      'username.required' => 'Username wajib diisi.',
+      'password.required' => 'Password wajib diisi.',
     ]);
 
     try {
-      $m  = $this->mtFor($mt, $client, $r);
-      $ip = trim((string)($data['client_ip'] ?? ''));
+      $m = $this->mtFor($mt, $client, $r);
 
-      // Autodetect IP dari MAC kalau IP kosong
-      if ($ip === '' && !empty($data['client_mac'])) {
-        $ip = $this->detectClientIpFromRouter($m, $data['client_mac']);
-        if ($ip === null) {
-          return $this->jsonOrBack($r, false, 'Tidak bisa menemukan IP dari MAC. Isi IP klien atau pastikan perangkat muncul di /ip hotspot hosts.');
-        }
+      // 1) auto-detect IP klien
+      $ip = $this->detectAnyClientIp($m);
+      if (!$ip) {
+        return $this->jsonOrBack($r, false,
+          'Tidak ada perangkat (host) terdeteksi. Sambungkan perangkat ke SSID hotspot lalu coba lagi.');
       }
 
-      // Login via API
+      // 2) login via API
       if (method_exists($m, 'hotspotActiveLogin')) {
-        $m->hotspotActiveLogin($ip, $data['username'], $data['password'], $data['client_mac'] ?: null);
+        $m->hotspotActiveLogin($ip, $data['username'], $data['password'], null);
       } else {
-        $params = ['ip'=>$ip,'user'=>$data['username'],'password'=>$data['password']];
-        if (!empty($data['client_mac'])) $params['mac-address'] = $data['client_mac'];
-        $m->raw('/ip/hotspot/active/login', $params);
+        $m->raw('/ip/hotspot/active/login', [
+          'ip'       => $ip,
+          'user'     => $data['username'],
+          'password' => $data['password'],
+        ]);
       }
 
       return $this->jsonOrBack($r, true, 'Login HOTSPOT berhasil (session aktif dibuat).');
@@ -241,30 +233,48 @@ class AdminClientController extends Controller
     }
   }
 
-  // Helper baru (letakkan di bawah helper lain)
-  private function detectClientIpFromRouter(MikrotikClient $m, ?string $mac): ?string
+  // Helper: cari IP klien dari beberapa sumber RouterOS
+  private function detectAnyClientIp(MikrotikClient $m): ?string
   {
+    // A. Hotspot host (kalau hotspot aktif)
     try {
-      // 1) Kalau ada MAC → langsung cari hostnya
-      if ($mac) {
-        $rows = $m->raw('/ip/hotspot/host/print', ['mac-address' => $mac]);
-        if (is_array($rows) && !empty($rows[0]['address'])) {
-          return $rows[0]['address'];
+      $rows = $m->raw('/ip/hotspot/host/print');
+      if (is_array($rows)) {
+        foreach ($rows as $r) {
+          $ip = $r['address'] ?? null;
+          if (!empty($ip)) return $ip;
         }
       }
+    } catch (\Throwable $e) { /* menu mungkin nggak ada */ }
 
-      // 2) Tanpa MAC: kalau hanya ada SATU host terdeteksi, pakai IP-nya (best-effort)
-      $hosts = $m->raw('/ip/hotspot/host/print');
-      if (is_array($hosts) && count($hosts) === 1) {
-        return $hosts[0]['address'] ?? null;
+    // B. ARP (IP dinamis yang terlihat di bridge/wlan)
+    try {
+      $rows = $m->raw('/ip/arp/print');
+      if (is_array($rows)) {
+        foreach ($rows as $r) {
+          $ip  = $r['address'] ?? null;
+          $dyn = ($r['dynamic'] ?? 'false') === 'true';
+          // ambil entri dinamis pertama yang punya IP
+          if ($ip && $dyn && filter_var($ip, FILTER_VALIDATE_IP)) return $ip;
+        }
       }
+    } catch (\Throwable $e) {}
 
-      // (opsional) bisa difilter "authorized"==false, tapi banyak variasi; kita simple saja
-    } catch (\Throwable $e) {
-      // diamkan → return null
-    }
+    // C. DHCP leases (kalau ada dhcp-server)
+    try {
+      $rows = $m->raw('/ip/dhcp-server/lease/print');
+      if (is_array($rows)) {
+        foreach ($rows as $r) {
+          if (($r['status'] ?? '') === 'bound' && !empty($r['address'])) {
+            return $r['address'];
+          }
+        }
+      }
+    } catch (\Throwable $e) {}
+
     return null;
   }
+
 
   /* ===================== Helpers ===================== */
 
