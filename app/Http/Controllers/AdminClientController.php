@@ -128,14 +128,20 @@ class AdminClientController extends Controller
       if ($r->boolean('deep')) {
         try {
           $m = $this->mtFor($mt, $client);
-          if (method_exists($m, 'ping')) $m->ping(); else $m->raw('/system/identity/print');
-          $msg .= ' • Auth OK';
+          $id = null;
+          if (method_exists($m,'raw')) {
+            $res = $m->raw('/system/identity/print');
+            $id  = is_array($res) && !empty($res[0]['name']) ? $res[0]['name'] : null;
+          } else if (method_exists($m,'getSystemInfo')) {
+            $info = (array) $m->getSystemInfo();
+            $id   = $info['identity'] ?? null;
+          }
+          $msg .= ' • Auth OK' . ($id ? " • Identity: {$id}" : '');
         } catch (\Throwable $e) {
           $em = $e->getMessage() ?: 'Auth gagal';
           if (stripos($em, 'invalid user name or password') !== false) {
             $em = 'Auth gagal: user/password API salah';
           }
-          // Tes koneksi = tetap OK; info auth hanya catatan
           $msg .= ' • Catatan: ' . $em;
         }
       }
