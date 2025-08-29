@@ -190,40 +190,48 @@ class AdminClientController extends Controller
    */
   public function routerHotspotLoginTest(Request $r, Client $client, MikrotikClient $mt)
   {
-      // Metode default: api
-      $method = strtolower((string)$r->input('method','api'));
+    // pakai API saja
+    $data = $r->validate([
+      'username'   => ['required','string','max:60'],
+      'password'   => ['required','string','max:120'],
+      'client_ip'  => ['required','ip'],
+      'client_mac' => ['nullable','string','max:32'],
+    ], [
+      'username.required'  => 'Username wajib diisi.',
+      'password.required'  => 'Password wajib diisi.',
+      'client_ip.required' => 'IP klien wajib diisi.',
+      'client_ip.ip'       => 'Format IP klien tidak valid.',
+    ], [
+      'client_ip' => 'IP klien',
+    ]);
 
-      if ($method !== 'api') {
-          return $this->jsonOrBack($r, false, 'Metode HTTP portal tidak didukung di server ini. Pilih metode API.');
+    try {
+      $m = $this->mtFor($mt, $client, $r);
+
+      if (method_exists($m, 'hotspotActiveLogin')) {
+        $m->hotspotActiveLogin($data['client_ip'], $data['username'], $data['password'], $data['client_mac'] ?: null);
+      } else {
+        $params = [
+          'ip'       => $data['client_ip'],
+          'user'     => $data['username'],
+          'password' => $data['password'],
+        ];
+        if (!empty($data['client_mac'])) $params['mac-address'] = $data['client_mac'];
+        $m->raw('/ip/hotspot/active/login', $params);
       }
 
-      $data = $r->validate([
-          'username'   => ['required','string','max:60'],
-          'password'   => ['required','string','max:120'],
-          'client_ip'  => ['required','ip'],
-          'client_mac' => ['nullable','string','max:32'],
-      ]);
-
-      try {
-          $m = $this->mtFor($mt, $client, $r);
-
-          if (method_exists($m, 'hotspotActiveLogin')) {
-              $m->hotspotActiveLogin($data['client_ip'], $data['username'], $data['password'], $data['client_mac'] ?: null);
-          } else {
-              // generic fallback
-              $params = [
-                  'ip'       => $data['client_ip'],
-                  'user'     => $data['username'],
-                  'password' => $data['password'],
-              ];
-              if (!empty($data['client_mac'])) $params['mac-address'] = $data['client_mac'];
-              $m->raw('/ip/hotspot/active/login', $params);
-          }
-
-          return $this->jsonOrBack($r, true, 'Login HOTSPOT OK via API (active session dibuat).');
-      } catch (\Throwable $e) {
-          return $this->jsonOrBack($r, false, 'Login via API gagal: '.$e->getMessage());
+      return $this->jsonOrBack($r, true, 'Login HOTSPOT berhasil (session aktif dibuat).');
+    } catch (\Throwable $e) {
+      $msg = $e->getMessage() ?: 'Gagal login.';
+      // Mikrotik biasanya melempar ini persis:
+      if (stripos($msg, 'invalid user name or password') !== false) {
+        $msg = 'Username atau password tidak valid.';
       }
+      if (stripos($msg, 'no route to host') !== false) {
+        $msg = 'Tidak dapat terhubung ke router (No route to host). Cek routing/firewall.';
+      }
+      return $this->jsonOrBack($r, false, $msg);
+    }
   }
 
   /* ===================== Helpers ===================== */
