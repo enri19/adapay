@@ -68,6 +68,7 @@
         <input type="hidden" name="ajax" value="1">
         <input type="hidden" name="router_host" value="{{ $client->router_host }}">
         <input type="hidden" name="router_port" value="{{ $client->router_port ?: 8728 }}">
+        <input type="hidden" name="deep" value="1">
         <button class="btn btn--primary">Jalankan Test</button>
       </form>
     </div>
