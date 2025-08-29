@@ -69,35 +69,41 @@ class AdminClientController extends Controller
    */
   public function tools(Request $r, Client $client, MikrotikClient $mt)
   {
-      $profiles = [];
-      $servers  = [];
+    $profiles = [];
+    $servers  = [];
+    $online   = false;
 
-      try {
-          $m = $this->mtFor($mt, $client);
+    try {
+      $m = $this->mtFor($mt, $client);
 
-          // Profil
-          if (method_exists($m, 'listHotspotProfiles')) {
-              $profiles = (array) $m->listHotspotProfiles();
-          } else {
-              $rows = $m->raw('/ip/hotspot/user/profile/print');
-              $profiles = collect($rows)->pluck('name')->filter()->values()->all();
-          }
-
-          // Server
-          if (method_exists($m, 'listHotspotServers')) {
-              $servers = (array) $m->listHotspotServers();
-          } else {
-              $rows = $m->raw('/ip/hotspot/print');
-              $servers = collect($rows)->pluck('name')->filter()->values()->all();
-          }
-      } catch (\Throwable $e) {
-          // biarkan kosong; info error tampil dengan flash di view jika mau
-          $r->session()->flash('error', 'Tidak bisa membaca profil/server: '.$e->getMessage());
+      // Coba ping ringan; kalau gagal lempar ke catch
+      if (method_exists($m, 'ping')) {
+        $m->ping();
+      } else {
+        $m->raw('/system/identity/print');
       }
+      $online = true;
 
-      if (empty($profiles)) $profiles = [ $client->default_profile ?: 'default' ];
+      // Hanya kalau online → ambil daftar
+      try {
+        $profiles = method_exists($m,'listHotspotProfiles')
+          ? (array) $m->listHotspotProfiles()
+          : collect($m->raw('/ip/hotspot/user/profile/print'))->pluck('name')->filter()->values()->all();
 
-      return view('admin.clients.tools', compact('client','profiles','servers'));
+        $servers = method_exists($m,'listHotspotServers')
+          ? (array) $m->listHotspotServers()
+          : collect($m->raw('/ip/hotspot/print'))->pluck('name')->filter()->values()->all();
+      } catch (\Throwable $e) {
+        // diamkan; form tetap bisa dipakai manual
+      }
+    } catch (\Throwable $e) {
+      // offline: jangan flash error keras, cukup kasih indikator di view
+      // $r->session()->flash('error','Router offline: '.$e->getMessage());
+    }
+
+    if (empty($profiles)) $profiles = [ $client->default_profile ?: 'default' ];
+
+    return view('admin.clients.tools', compact('client','profiles','servers','online'));
   }
 
   /**
@@ -105,32 +111,32 @@ class AdminClientController extends Controller
    */
   public function routerTest(Request $r, Client $client, MikrotikClient $mt)
   {
-      try {
-          $m = $this->mtFor($mt, $client);
+    try {
+      $m = $this->mtFor($mt, $client);
 
-          if (method_exists($m, 'ping')) {
-              $m->ping();
-          } else {
-              // fallback ringan
-              $m->raw('/system/identity/print');
-          }
-
-          $info = method_exists($m, 'getSystemInfo') ? (array)$m->getSystemInfo() : [];
-          $msg  = 'Tersambung ke router.';
-          if (!empty($info)) {
-              $msg = sprintf(
-                  'Tersambung: %s%s%s%s',
-                  $info['identity'] ?? 'router',
-                  !empty($info['board'])   ? ' ('.$info['board'].')'   : '',
-                  !empty($info['version']) ? ' v'.$info['version']     : '',
-                  !empty($info['uptime'])  ? ', uptime '.$info['uptime']: ''
-              );
-          }
-
-          return $this->jsonOrBack($r, true, $msg);
-      } catch (\Throwable $e) {
-          return $this->jsonOrBack($r, false, 'Gagal konek: '.$e->getMessage());
+      if (method_exists($m, 'ping')) {
+        $m->ping();
+      } else {
+        // fallback ringan
+        $m->raw('/system/identity/print');
       }
+
+      $info = method_exists($m, 'getSystemInfo') ? (array)$m->getSystemInfo() : [];
+      $msg  = 'Tersambung ke router.';
+      if (!empty($info)) {
+        $msg = sprintf(
+          'Tersambung: %s%s%s%s',
+          $info['identity'] ?? 'router',
+          !empty($info['board'])   ? ' ('.$info['board'].')'   : '',
+          !empty($info['version']) ? ' v'.$info['version']     : '',
+          !empty($info['uptime'])  ? ', uptime '.$info['uptime']: ''
+        );
+      }
+
+      return $this->jsonOrBack($r, true, $msg);
+    } catch (\Throwable $e) {
+      return $this->jsonOrBack($r, false, 'Gagal konek: '.$e->getMessage());
+    }
   }
 
   /**
