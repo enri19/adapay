@@ -53,23 +53,28 @@
       <div class="loader-overlay" aria-hidden="true">
         <div class="loader"><span class="ring"></span><span class="txt">Memproses…</span></div>
       </div>
-      
       <div style="font-weight:700;margin-bottom:.25rem">Test Koneksi Router</div>
-      <div class="help">
-        {{ $client->router_host ?: '—' }}:{{ $client->router_port ?: 8728 }} — user: {{ $client->router_user ?: '—' }}
-      </div>
-      <form
-        method="POST"
-        action="{{ route('admin.clients.router.test',$client) }}"
-        class="tool-form"
-        data-loading="Menghubungkan router…"
-        style="margin-top:.75rem">
+      <div class="help">{{ $client->router_host ?: '—' }}:{{ $client->router_port ?: 8728 }} — user: {{ $client->router_user ?: '—' }}</div>
+
+      {{-- Port-only --}}
+      <form method="POST"
+            action="{{ route('admin.clients.router.test',$client) }}"
+            class="tool-form"
+            data-loading="Menghubungkan router…"
+            style="margin-top:.75rem">
         @csrf
-        <input type="hidden" name="ajax" value="1">
-        <input type="hidden" name="router_host" value="{{ $client->router_host }}">
-        <input type="hidden" name="router_port" value="{{ $client->router_port ?: 8728 }}">
-        <input type="hidden" name="deep" value="1">
-        <button class="btn btn--primary">Jalankan Test</button>
+        <button class="btn btn--primary">Tes Port</button>
+      </form>
+
+      {{-- Tes + Auth (tanpa hidden) --}}
+      <form method="POST"
+            action="{{ route('admin.clients.router.test',$client) }}"
+            class="tool-form"
+            data-loading="Tes + autentikasi…"
+            data-deep="1"
+            style="margin-top:.5rem">
+        @csrf
+        <button class="btn">Tes + Auth</button>
       </form>
     </div>
 
@@ -81,22 +86,18 @@
       <div style="font-weight:700;margin-bottom:.25rem">Buat User Hotspot (Test)</div>
       <div class="help">Buat/overwrite user test di router ini.</div>
 
-      <form
-        method="POST"
-        action="{{ route('admin.clients.router.hotspot-test-user',$client) }}"
-        class="form tool-form"
-        data-loading="Menghubungkan router…"
-        style="margin-top:.5rem">
+      <form method="POST"
+            action="{{ route('admin.clients.router.hotspot-test-user',$client) }}"
+            class="form tool-form"
+            data-loading="Membuat user hotspot…"
+            style="margin-top:.5rem">
         @csrf
-        <input type="hidden" name="ajax" value="1">
-        <input type="hidden" name="router_host" value="{{ $client->router_host }}">
-        <input type="hidden" name="router_port" value="{{ $client->router_port ?: 8728 }}">
         <div class="form-grid form-2">
           <div>
             <label class="label">Mode</label>
             <div class="control">
+              @php $m = $client->auth_mode ?? 'code'; @endphp
               <select class="select" name="mode">
-                @php $m = $client->auth_mode ?? 'userpass'; @endphp
                 <option value="userpass" {{ $m==='userpass'?'selected':'' }}>Username + Password</option>
                 <option value="code"     {{ $m==='code'    ?'selected':'' }}>Kode (username = password)</option>
               </select>
@@ -104,9 +105,7 @@
           </div>
           <div>
             <label class="label">Limit Uptime</label>
-            <div class="control">
-              <input class="input" name="limit" value="10m" placeholder="10m / 30m / 1h">
-            </div>
+            <div class="control"><input class="input" name="limit" value="10m" placeholder="10m / 30m / 1h"></div>
           </div>
 
           <div>
@@ -147,68 +146,42 @@
         </div>
       </form>
     </div>
-  </div>
 
-  {{-- Kartu: Test Login Hotspot User (via portal) --}}
-  <div class="card tool-card" style="margin-top:12px">
-    <div class="loader-overlay" aria-hidden="true">
-      <div class="loader"><span class="ring"></span><span class="txt">Memproses…</span></div>
-    </div>
-    <div style="font-weight:700;margin-bottom:.25rem">Test Login Hotspot (Portal)</div>
-    <div class="help">
-      Sistem akan mengirim POST ke portal hotspot (server harus bisa menjangkaunya).
-      Portal saat ini: <span class="mono">{{ $client->hotspot_portal ?: '—' }}</span>
-    </div>
+    {{-- Kartu: Test Login Hotspot (API) --}}
+    <div class="card tool-card" style="margin-top:12px">
+      <div class="loader-overlay" aria-hidden="true">
+        <div class="loader"><span class="ring"></span><span class="txt">Memproses…</span></div>
+      </div>
+      <div style="font-weight:700;margin-bottom:.25rem">Test Login Hotspot (API)</div>
+      <div class="help">Server akan meminta router membuat session aktif untuk perangkat yang terdeteksi (tanpa portal lokal).</div>
 
-    <form method="POST"
-      action="{{ route('admin.clients.router.hotspot-login-test',$client) }}"
-      class="form tool-form"
-      style="margin-top:.5rem"
-      data-loading="Menguji login hotspot…">
-      @csrf
-      <input type="hidden" name="ajax" value="1">
-      <input type="hidden" name="router_host" value="{{ $client->router_host }}">
-      <input type="hidden" name="router_port" value="{{ $client->router_port ?: 8728 }}">
-      <div class="form-grid form-2">
-        <div>
-          <label class="label">Username</label>
-          <div class="control"><input class="input mono" name="username" required></div>
-        </div>
-        <div>
-          <label class="label">Password</label>
-          <div class="control"><input class="input mono" name="password" required></div>
-        </div>
-
-        <div>
-          <label class="label">Web Port</label>
-          <div class="control">
-            <input class="input" type="number" name="web_port" placeholder="64872 (http) / 64873 (https)">
-          </div>
-          <div class="help">Kosongkan untuk coba otomatis: 64872, 80, 8080, 64873, 443</div>
-        </div>
-        <div>
-          <label class="label">HTTPS</label>
-          <div class="control" style="gap:.5rem">
-            <input type="checkbox" name="https" value="1">
-            <span class="help">Centang jika hotspot login via HTTPS</span>
-          </div>
-        </div>
-
-        <div class="form-2" style="grid-column:1/-1">
+      <form method="POST"
+            action="{{ route('admin.clients.router.hotspot-login-test',$client) }}"
+            class="form tool-form"
+            data-loading="Menguji login hotspot…"
+            style="margin-top:.5rem">
+        @csrf
+        <div class="form-grid form-2">
           <div>
-            <label class="label">Portal URL (opsional)</label>
-            <div class="control">
-              <input class="input" name="portal" value="" placeholder="http://x.x.x.x:64872/login">
-            </div>
-            <div class="help">Jika diisi, akan dicoba dulu. Kalau kosong, pakai router host & port di atas.</div>
+            <label class="label">Username</label>
+            <div class="control"><input class="input mono" name="username" required></div>
+          </div>
+          <div>
+            <label class="label">Password</label>
+            <div class="control"><input class="input mono" name="password" required></div>
+          </div>
+          <div>
+            <label class="label">MAC klien (opsional)</label>
+            <div class="control"><input class="input mono" name="mac" placeholder="AA:BB:CC:DD:EE:FF"></div>
+            <div class="help">Kalau diisi, IP klien dicari berdasarkan MAC.</div>
           </div>
         </div>
-      </div>
 
-      <div class="row-actions">
-        <button class="btn">Test Login</button>
-      </div>
-    </form>
+        <div class="row-actions">
+          <button class="btn">Test Login</button>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 @endsection
@@ -238,10 +211,11 @@
     btns.forEach(b=>b.setAttribute('disabled','disabled'));
 
     const fd = new FormData(form);
-    fd.set('ajax','1');
+    if (form.dataset.deep === '1') fd.set('deep','1');
+
     const csrf = form.querySelector('input[name="_token"]')?.value || '';
 
-    return fetch(form.action, {
+    fetch(form.action, {
       method: form.method || 'POST',
       headers: {
         'X-Requested-With': 'XMLHttpRequest',
@@ -259,7 +233,7 @@
       flash(ok ? 'ok' : 'err', msg);
     })
     .catch(err => {
-      flash('err', 'Gagal mengirim permintaan: ' + (err?.message || err));
+      flash('err', 'Gagal mengirim: ' + (err?.message || err));
     })
     .finally(() => {
       card.classList.remove('is-loading');
@@ -270,7 +244,7 @@
   document.addEventListener('DOMContentLoaded', function(){
     document.querySelectorAll('.tool-form').forEach(function(form){
       form.addEventListener('submit', function(e){
-        e.preventDefault(); // ← penting biar gak reload
+        e.preventDefault();
         submitToolForm(form);
       }, {capture:true});
     });
