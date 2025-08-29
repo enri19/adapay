@@ -191,38 +191,40 @@ class AdminClientController extends Controller
   // Controller: ganti method ini seluruhnya
   public function routerHotspotLoginTest(Request $r, Client $client, MikrotikClient $mt)
   {
-    // VALIDASI: client_ip opsional sekarang
+    // Minimal: username/password; lalu EITHER client_ip OR client_mac
     $data = $r->validate([
       'username'   => ['required','string','max:60'],
       'password'   => ['required','string','max:120'],
-      'client_ip'  => ['nullable','ip'],
-      'client_mac' => ['nullable','string','max:32'],
+      'client_ip'  => ['nullable','ip','required_without:client_mac'],
+      'client_mac' => ['nullable','string','max:32','required_without:client_ip'],
     ], [
-      'username.required' => 'Username wajib diisi.',
-      'password.required' => 'Password wajib diisi.',
-      'client_ip.ip'      => 'Format IP klien tidak valid.',
+      'username.required'            => 'Username wajib diisi.',
+      'password.required'            => 'Password wajib diisi.',
+      'client_ip.required_without'   => 'Isi IP klien atau MAC (salah satu).',
+      'client_mac.required_without'  => 'Isi MAC atau IP klien (salah satu).',
+      'client_ip.ip'                 => 'Format IP klien tidak valid.',
+    ], [
+      'client_ip'  => 'IP klien',
+      'client_mac' => 'MAC klien',
     ]);
 
     try {
       $m  = $this->mtFor($mt, $client, $r);
       $ip = trim((string)($data['client_ip'] ?? ''));
 
-      // AUTO-DETECT: kalau IP kosong, coba cari dari MAC → /ip/hotspot/host/print
-      if ($ip === '') {
-        $ip = $this->detectClientIpFromRouter($m, $data['client_mac'] ?? null);
+      // Autodetect IP dari MAC kalau IP kosong
+      if ($ip === '' && !empty($data['client_mac'])) {
+        $ip = $this->detectClientIpFromRouter($m, $data['client_mac']);
         if ($ip === null) {
-          return $this->jsonOrBack(
-            $r,
-            false,
-            'Tidak bisa menentukan IP klien otomatis. Isi IP klien atau MAC di form, lalu coba lagi.'
-          );
+          return $this->jsonOrBack($r, false, 'Tidak bisa menemukan IP dari MAC. Isi IP klien atau pastikan perangkat muncul di /ip hotspot hosts.');
         }
       }
 
+      // Login via API
       if (method_exists($m, 'hotspotActiveLogin')) {
         $m->hotspotActiveLogin($ip, $data['username'], $data['password'], $data['client_mac'] ?: null);
       } else {
-        $params = ['ip' => $ip, 'user' => $data['username'], 'password' => $data['password']];
+        $params = ['ip'=>$ip,'user'=>$data['username'],'password'=>$data['password']];
         if (!empty($data['client_mac'])) $params['mac-address'] = $data['client_mac'];
         $m->raw('/ip/hotspot/active/login', $params);
       }
@@ -232,8 +234,7 @@ class AdminClientController extends Controller
       $msg = $e->getMessage() ?: 'Gagal login.';
       if (stripos($msg, 'invalid user name or password') !== false) {
         $msg = 'Username atau password tidak valid.';
-      }
-      if (stripos($msg, 'no route to host') !== false) {
+      } elseif (stripos($msg, 'no route to host') !== false) {
         $msg = 'Tidak dapat terhubung ke router (No route to host). Cek routing/firewall.';
       }
       return $this->jsonOrBack($r, false, $msg);
