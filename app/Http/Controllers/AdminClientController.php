@@ -65,7 +65,7 @@ class AdminClientController extends Controller
   }
 
   /**
-   * Halaman Tools: ambil daftar profile/server (best effort).
+   * Tools page (hanya coba ping + ambil profile/server kalau bisa)
    */
   public function tools(Request $r, Client $client, MikrotikClient $mt)
   {
@@ -76,15 +76,13 @@ class AdminClientController extends Controller
     try {
       $m = $this->mtFor($mt, $client);
 
-      // Coba ping ringan; kalau gagal lempar ke catch
-      if (method_exists($m, 'ping')) {
-        $m->ping();
-      } else {
-        $m->raw('/system/identity/print');
-      }
+      // ping ringan
+      if (method_exists($m, 'ping')) $m->ping();
+      else $m->raw('/system/identity/print');
+
       $online = true;
 
-      // Hanya kalau online → ambil daftar
+      // best-effort
       try {
         $profiles = method_exists($m,'listHotspotProfiles')
           ? (array) $m->listHotspotProfiles()
@@ -94,11 +92,10 @@ class AdminClientController extends Controller
           ? (array) $m->listHotspotServers()
           : collect($m->raw('/ip/hotspot/print'))->pluck('name')->filter()->values()->all();
       } catch (\Throwable $e) {
-        // diamkan; form tetap bisa dipakai manual
+        // biarkan kosong
       }
     } catch (\Throwable $e) {
-      // offline: jangan flash error keras, cukup kasih indikator di view
-      // $r->session()->flash('error','Router offline: '.$e->getMessage());
+      // offline → tampil indikator di view saja
     }
 
     if (empty($profiles)) $profiles = [ $client->default_profile ?: 'default' ];
@@ -107,21 +104,17 @@ class AdminClientController extends Controller
   }
 
   /**
-   * Test koneksi API: ping + info ringkas (JSON jika AJAX).
+   * Test koneksi router
    */
   public function routerTest(Request $r, Client $client, MikrotikClient $mt)
   {
     try {
-      $m = $this->mtFor($mt, $client, $r);
+      $m = $this->mtFor($mt, $client);
 
-      if (method_exists($m, 'ping')) {
-        $m->ping();
-      } else {
-        // fallback ringan
-        $m->raw('/system/identity/print');
-      }
+      if (method_exists($m, 'ping')) $m->ping();
+      else $m->raw('/system/identity/print');
 
-      $info = method_exists($m, 'getSystemInfo') ? (array)$m->getSystemInfo() : [];
+      $info = method_exists($m, 'getSystemInfo') ? (array) $m->getSystemInfo() : [];
       $msg  = 'Tersambung ke router.';
       if (!empty($info)) {
         $msg = sprintf(
@@ -140,85 +133,102 @@ class AdminClientController extends Controller
   }
 
   /**
-   * Buat/overwrite user hotspot test (idempotent).
+   * Buat/overwrite user hotspot (test)
    */
   public function routerHotspotTestUser(Request $r, Client $client, MikrotikClient $mt)
   {
-      $data = $r->validate([
-          'name'     => ['nullable','string','max:60'],
-          'password' => ['nullable','string','max:60'],
-          'profile'  => ['nullable','string','max:120'],
-          'limit'    => ['nullable','string','max:20'], // contoh: 10m, 1h
-          'mode'     => ['nullable','in:userpass,code'],
-      ]);
+    $data = $r->validate([
+      'name'     => ['nullable','string','max:60'],
+      'password' => ['nullable','string','max:60'],
+      'profile'  => ['nullable','string','max:120'],
+      'limit'    => ['nullable','string','max:20'], // contoh: 10m, 30m, 1h
+      'mode'     => ['nullable','in:userpass,code'],
+    ]);
 
-      // default dari client
-      $mode    = strtolower((string)($data['mode'] ?? $client->auth_mode ?? 'userpass'));
-      if (!in_array($mode, ['userpass','code'], true)) $mode = 'userpass';
+    // === mode sesuai referensi: default ke 'code' ===
+    $mode = strtolower((string)($data['mode'] ?? $client->auth_mode ?? 'code'));
+    if (!in_array($mode, ['code','userpass'], true)) $mode = 'code';
 
-      $suffix  = now()->format('ymdHi');
-      $name    = trim((string)($data['name'] ?? 'test-'.$suffix));
+    // === generate kredensial sesuai referensi (ALL UPPERCASE) ===
+    $username = null;
+    $password = null;
 
-      if ($mode === 'code') {
-          $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-          $code=''; for($i=0;$i<8;$i++) $code .= $alphabet[random_int(0, strlen($alphabet)-1)];
-          $password = $data['password'] ?? $code;
-          $name     = $data['name']     ?? $code;
-      } else {
-          $password = $data['password'] ?? 'pass-'.$suffix;
+    if ($mode === 'userpass') {
+      // jika user isi, pakai & UPPERCASE; kalau kosong → generate
+      $username = strtoupper(trim((string)($data['name'] ?? '')));
+      $password = strtoupper(trim((string)($data['password'] ?? '')));
+      if ($username === '') {
+        $username = 'HV-' . strtoupper(\Illuminate\Support\Str::random(6));
       }
-
-      $profile = (string) ($data['profile'] ?? ($client->default_profile ?: 'default'));
-      $limit   = (string) ($data['limit'] ?? '10m');
-
-      try {
-          $m = $this->mtFor($mt, $client, $r);
-          $comment = 'created-by-admin-test '.now()->format('Y-m-d H:i:s');
-
-          // Signature 5 argumen (tanpa server) sesuai service kamu
-          $m->createHotspotUser($name, $password, $profile, $comment, $limit);
-
-          $msg = "User test dibuat: $name / $password (profile: $profile, limit: $limit)";
-          return $this->jsonOrBack($r, true, $msg);
-      } catch (\Throwable $e) {
-          return $this->jsonOrBack($r, false, 'Gagal membuat user hotspot: '.$e->getMessage());
+      if ($password === '') {
+        $password = strtoupper(\Illuminate\Support\Str::random(8));
       }
+    } else {
+      // mode "code": username == password == KODE (tanpa karakter rancu)
+      $provided = strtoupper(trim((string)($data['name'] ?? '')));
+      if ($provided === '') {
+        $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I,O,0,1
+        $code = '';
+        for ($i = 0; $i < 8; $i++) {
+          $code .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+        }
+        $provided = $code;
+      }
+      $username = $provided;
+      // kalau user isi password, abaikan → tetap samakan dengan username (sesuai referensi)
+      $password = $provided;
+    }
+
+    $profile = (string) ($data['profile'] ?? ($client->default_profile ?: 'default'));
+    $limit   = (string) ($data['limit'] ?? '10m');
+
+    try {
+      $m = $this->mtFor($mt, $client);
+      $comment = 'TEST user via admin.tools ' . now()->format('Y-m-d H:i:s');
+
+      // Signature service kamu: (name, pass, profile, comment, limitUptime)
+      $m->createHotspotUser($username, $password, $profile, $comment, $limit);
+
+      $msg = "User test dibuat: {$username} / {$password} (profile: {$profile}, limit: {$limit})";
+      return $this->jsonOrBack($r, true, $msg);
+    } catch (\Throwable $e) {
+      return $this->jsonOrBack($r, false, 'Gagal membuat user hotspot: ' . $e->getMessage());
+    }
   }
 
   /**
-   * Test login hotspot via API (butuh IP klien; MAC opsional).
+   * Router Test Login
    */
-  // Controller: routerHotspotLoginTest (final)
-  public function routerHotspotLoginTest(Request $r, Client $client, MikrotikClient $mt)
+  public function routerHotspotLoginTest(Request $r, Client $client, \App\Services\Mikrotik\MikrotikClient $mt)
   {
-    // View cukup kirim username & password (tanpa IP/MAC)
+    // View cukup kirim username & password; MAC opsional
     $data = $r->validate([
       'username' => ['required','string','max:60'],
       'password' => ['required','string','max:120'],
+      'mac'      => ['nullable','string','max:32'],
     ], [
       'username.required' => 'Username wajib diisi.',
       'password.required' => 'Password wajib diisi.',
     ]);
 
     try {
-      $m = $this->mtFor($mt, $client, $r);
+      $m  = $this->mtFor($mt, $client);
 
-      // 1) auto-detect IP klien
-      $ip = $this->detectAnyClientIp($m);
+      // Cari IP klien otomatis dari router (host → ARP → DHCP)
+      $ip = $this->detectAnyClientIp($m, $data['mac'] ?? null);
       if (!$ip) {
-        return $this->jsonOrBack($r, false,
-          'Tidak ada perangkat (host) terdeteksi. Sambungkan perangkat ke SSID hotspot lalu coba lagi.');
+        return $this->jsonOrBack($r, false, 'Tidak ada perangkat terdeteksi di router. Sambungkan perangkat ke SSID hotspot lalu coba lagi.');
       }
 
-      // 2) login via API
+      // Login via API
       if (method_exists($m, 'hotspotActiveLogin')) {
-        $m->hotspotActiveLogin($ip, $data['username'], $data['password'], null);
+        $m->hotspotActiveLogin($ip, $data['username'], $data['password'], $data['mac'] ?? null);
+      } elseif (method_exists($m, 'raw')) {
+        $params = ['ip'=>$ip,'user'=>$data['username'],'password'=>$data['password']];
+        if (!empty($data['mac'])) $params['mac-address'] = $data['mac'];
+        $m->raw('/ip/hotspot/active/login', $params);
       } else {
-        $m->raw('/ip/hotspot/active/login', [
-          'ip'       => $ip,
-          'user'     => $data['username'],
-          'password' => $data['password'],
-        ]);
+        throw new \RuntimeException('Driver Mikrotik belum mendukung login (hotspotActiveLogin/raw).');
       }
 
       return $this->jsonOrBack($r, true, 'Login HOTSPOT berhasil (session aktif dibuat).');
@@ -227,46 +237,62 @@ class AdminClientController extends Controller
       if (stripos($msg, 'invalid user name or password') !== false) {
         $msg = 'Username atau password tidak valid.';
       } elseif (stripos($msg, 'no route to host') !== false) {
-        $msg = 'Tidak dapat terhubung ke router (No route to host). Cek routing/firewall.';
+        $msg = 'Tidak dapat terhubung ke router (No route to host). Cek routing/VPN/firewall dari server aplikasi.';
       }
       return $this->jsonOrBack($r, false, $msg);
     }
   }
 
-  // Helper: cari IP klien dari beberapa sumber RouterOS
-  private function detectAnyClientIp(MikrotikClient $m): ?string
+  /**
+   * Cari IP klien dari router:
+   *  - hotspot hosts (kalau ada)
+   *  - ARP (dinamis)
+   *  - DHCP leases (status bound)
+   */
+  private function detectAnyClientIp($m, ?string $mac): ?string
   {
-    // A. Hotspot host (kalau hotspot aktif)
+    // A) /ip/hotspot/host
     try {
-      $rows = $m->raw('/ip/hotspot/host/print');
-      if (is_array($rows)) {
-        foreach ($rows as $r) {
-          $ip = $r['address'] ?? null;
-          if (!empty($ip)) return $ip;
-        }
-      }
-    } catch (\Throwable $e) { /* menu mungkin nggak ada */ }
-
-    // B. ARP (IP dinamis yang terlihat di bridge/wlan)
-    try {
-      $rows = $m->raw('/ip/arp/print');
-      if (is_array($rows)) {
-        foreach ($rows as $r) {
-          $ip  = $r['address'] ?? null;
-          $dyn = ($r['dynamic'] ?? 'false') === 'true';
-          // ambil entri dinamis pertama yang punya IP
-          if ($ip && $dyn && filter_var($ip, FILTER_VALIDATE_IP)) return $ip;
+      if (method_exists($m, 'raw')) {
+        $rows = $mac
+          ? $m->raw('/ip/hotspot/host/print', ['mac-address'=>$mac])
+          : $m->raw('/ip/hotspot/host/print');
+        if (is_array($rows)) {
+          foreach ($rows as $r) {
+            $ip = $r['address'] ?? null;
+            if (!empty($ip)) return $ip;
+          }
         }
       }
     } catch (\Throwable $e) {}
 
-    // C. DHCP leases (kalau ada dhcp-server)
+    // B) /ip/arp
     try {
-      $rows = $m->raw('/ip/dhcp-server/lease/print');
-      if (is_array($rows)) {
-        foreach ($rows as $r) {
-          if (($r['status'] ?? '') === 'bound' && !empty($r['address'])) {
-            return $r['address'];
+      if (method_exists($m, 'raw')) {
+        $rows = $mac
+          ? $m->raw('/ip/arp/print', ['mac-address'=>$mac])
+          : $m->raw('/ip/arp/print');
+        if (is_array($rows)) {
+          foreach ($rows as $r) {
+            $ip  = $r['address'] ?? null;
+            $dyn = ($r['dynamic'] ?? 'false') === 'true';
+            if ($ip && $dyn && filter_var($ip, FILTER_VALIDATE_IP)) return $ip;
+          }
+        }
+      }
+    } catch (\Throwable $e) {}
+
+    // C) /ip/dhcp-server/lease
+    try {
+      if (method_exists($m, 'raw')) {
+        $rows = $mac
+          ? $m->raw('/ip/dhcp-server/lease/print', ['mac-address'=>$mac])
+          : $m->raw('/ip/dhcp-server/lease/print');
+        if (is_array($rows)) {
+          foreach ($rows as $r) {
+            if (($r['status'] ?? '') === 'bound' && !empty($r['address'])) {
+              return $r['address'];
+            }
           }
         }
       }
@@ -275,53 +301,37 @@ class AdminClientController extends Controller
     return null;
   }
 
+  /* ========== Helpers (DB only, tanpa override dari view) ========== */
 
-  /* ===================== Helpers ===================== */
-
-  /**
-   * Build instance MikrotikClient yang sudah terkonfigurasi untuk client.
-   */
-  private function mtFor(MikrotikClient $mt, Client $client, ?Request $r = null): MikrotikClient
+  private function mtFor(MikrotikClient $mt, Client $client): MikrotikClient
   {
-      // nilai default dari DB
-      $router = [
-          'host' => (string) $client->router_host,
-          'port' => (int)   ($client->router_port ?: 8728),
-          'user' => (string) $client->router_user,
-          'pass' => (string) $client->router_pass,
-      ];
+    $router = [
+      'host' => (string) $client->router_host,
+      'port' => (int)   ($client->router_port ?: 8728),
+      'user' => (string) $client->router_user,
+      'pass' => (string) $client->router_pass,
+    ];
 
-      // override dari request (jika dikirim dari view)
-      if ($r) {
-          $ovhHost = trim((string) $r->input('router_host',''));
-          $ovhPort = $r->input('router_port');
-          if ($ovhHost !== '') $router['host'] = $ovhHost;
-          if ($ovhPort !== null && $ovhPort !== '') $router['port'] = (int) $ovhPort;
-      }
+    if ($router['host'] === '' || $router['user'] === '' || $router['pass'] === '') {
+      throw new \RuntimeException('Konfigurasi router belum lengkap (host/user/pass).');
+    }
 
-      if ($router['host'] === '' || $router['user'] === '' || $router['pass'] === '') {
-          throw new \RuntimeException('Konfigurasi router belum lengkap (host/user/pass).');
-      }
-
-      if (method_exists($mt, 'withConfig')) {
-          $new = $mt->withConfig($router);
-          return ($new instanceof MikrotikClient) ? $new : $mt;
-      }
-      if (method_exists($mt, 'connect')) {
-          $mt->connect($router['host'], $router['port'], $router['user'], $router['pass']);
-          return $mt;
-      }
+    if (method_exists($mt, 'withConfig')) {
+      $new = $mt->withConfig($router);
+      return ($new instanceof MikrotikClient) ? $new : $mt;
+    }
+    if (method_exists($mt, 'connect')) {
+      $mt->connect($router['host'], $router['port'], $router['user'], $router['pass']);
       return $mt;
+    }
+    return $mt;
   }
 
-  /**
-   * Helper respons: JSON untuk AJAX, flash redirect untuk normal.
-   */
   private function jsonOrBack(Request $r, bool $ok, string $msg)
   {
-      if ($r->ajax() || $r->wantsJson() || $r->boolean('ajax')) {
-          return response()->json(['ok'=>$ok,'message'=>$msg], $ok ? 200 : 422);
-      }
-      return $ok ? back()->with('ok',$msg) : back()->with('error',$msg);
+    if ($r->ajax() || $r->wantsJson() || $r->boolean('ajax')) {
+      return response()->json(['ok'=>$ok,'message'=>$msg], $ok ? 200 : 422);
+    }
+    return $ok ? back()->with('ok',$msg) : back()->with('error',$msg);
   }
 }
