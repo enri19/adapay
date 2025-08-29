@@ -106,29 +106,55 @@ class AdminClientController extends Controller
   /**
    * Test koneksi router
    */
-  public function routerTest(Request $r, Client $client, MikrotikClient $mt)
+  public function routerTest(Request $r, Client $client, \App\Services\Mikrotik\MikrotikClient $mt)
   {
     try {
-      $m = $this->mtFor($mt, $client);
-      if (method_exists($m,'ping')) $m->ping(); else $m->raw('/system/identity/print');
-      $info = method_exists($m,'getSystemInfo') ? (array)$m->getSystemInfo() : [];
-      $msg  = 'Tersambung ke router.';
-      if (!empty($info)) {
-        $msg = sprintf('Tersambung: %s%s%s%s',
-          $info['identity'] ?? 'router',
-          !empty($info['board'])   ? ' ('.$info['board'].')'   : '',
-          !empty($info['version']) ? ' v'.$info['version']     : '',
-          !empty($info['uptime'])  ? ', uptime '.$info['uptime']: ''
-        );
+      $host = trim((string) $client->router_host);
+      $port = (int) ($client->router_port ?: 8728);
+      if ($host === '') {
+        throw new \RuntimeException('Router host belum diset pada client.');
       }
+
+      // 1) Port-only test (tanpa auth)
+      $probe = $this->tcpProbe($host, $port, 3); // timeout 3s
+      if (!$probe['ok']) {
+        $err = $probe['error'] ?: 'Tidak bisa membuka koneksi TCP';
+        return $this->jsonOrBack($r, false, "TCP connect gagal ke {$host}:{$port} — {$err}");
+      }
+
+      $msg = "Port API terbuka di {$host}:{$port} ({$probe['latency_ms']} ms)";
+
+      // 2) (opsional) Deep/auth test kalau diminta ?deep=1 (atau field hidden deep=1)
+      if ($r->boolean('deep')) {
+        try {
+          $m = $this->mtFor($mt, $client);
+          if (method_exists($m, 'ping')) $m->ping(); else $m->raw('/system/identity/print');
+          $msg .= ' • Auth OK';
+        } catch (\Throwable $e) {
+          $em = $e->getMessage() ?: 'Auth gagal';
+          if (stripos($em, 'invalid user name or password') !== false) {
+            $em = 'Auth gagal: user/password API salah';
+          }
+          // Tes koneksi = tetap OK; info auth hanya catatan
+          $msg .= ' • Catatan: ' . $em;
+        }
+      }
+
       return $this->jsonOrBack($r, true, $msg);
     } catch (\Throwable $e) {
-      $msg = $e->getMessage() ?: 'Gagal konek.';
-      if (stripos($msg, 'invalid user name or password') !== false) {
-        $msg = 'User/Password API router salah. Pastikan memakai **/user** (system user), bukan hotspot user.';
-      }
-      return $this->jsonOrBack($r, false, 'Gagal konek: '.$msg);
+      return $this->jsonOrBack($r, false, 'Gagal tes: ' . $e->getMessage());
     }
+  }
+
+  /** Port probe tanpa autentikasi */
+  private function tcpProbe(string $host, int $port, int $timeout = 3): array
+  {
+    $errno = 0; $errstr = '';
+    $start = microtime(true);
+    $fp = @stream_socket_client("tcp://{$host}:{$port}", $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT);
+    $ms = (int) round((microtime(true) - $start) * 1000);
+    if ($fp) { fclose($fp); return ['ok' => true, 'latency_ms' => $ms]; }
+    return ['ok' => false, 'error' => $errstr, 'code' => $errno];
   }
 
   /**
