@@ -188,34 +188,41 @@ class AdminClientController extends Controller
   /**
    * Test login hotspot via API (butuh IP klien; MAC opsional).
    */
+  // Controller: ganti method ini seluruhnya
   public function routerHotspotLoginTest(Request $r, Client $client, MikrotikClient $mt)
   {
-    // pakai API saja
+    // VALIDASI: client_ip opsional sekarang
     $data = $r->validate([
       'username'   => ['required','string','max:60'],
       'password'   => ['required','string','max:120'],
-      'client_ip'  => ['required','ip'],
+      'client_ip'  => ['nullable','ip'],
       'client_mac' => ['nullable','string','max:32'],
     ], [
-      'username.required'  => 'Username wajib diisi.',
-      'password.required'  => 'Password wajib diisi.',
-      'client_ip.required' => 'IP klien wajib diisi.',
-      'client_ip.ip'       => 'Format IP klien tidak valid.',
-    ], [
-      'client_ip' => 'IP klien',
+      'username.required' => 'Username wajib diisi.',
+      'password.required' => 'Password wajib diisi.',
+      'client_ip.ip'      => 'Format IP klien tidak valid.',
     ]);
 
     try {
-      $m = $this->mtFor($mt, $client, $r);
+      $m  = $this->mtFor($mt, $client, $r);
+      $ip = trim((string)($data['client_ip'] ?? ''));
+
+      // AUTO-DETECT: kalau IP kosong, coba cari dari MAC → /ip/hotspot/host/print
+      if ($ip === '') {
+        $ip = $this->detectClientIpFromRouter($m, $data['client_mac'] ?? null);
+        if ($ip === null) {
+          return $this->jsonOrBack(
+            $r,
+            false,
+            'Tidak bisa menentukan IP klien otomatis. Isi IP klien atau MAC di form, lalu coba lagi.'
+          );
+        }
+      }
 
       if (method_exists($m, 'hotspotActiveLogin')) {
-        $m->hotspotActiveLogin($data['client_ip'], $data['username'], $data['password'], $data['client_mac'] ?: null);
+        $m->hotspotActiveLogin($ip, $data['username'], $data['password'], $data['client_mac'] ?: null);
       } else {
-        $params = [
-          'ip'       => $data['client_ip'],
-          'user'     => $data['username'],
-          'password' => $data['password'],
-        ];
+        $params = ['ip' => $ip, 'user' => $data['username'], 'password' => $data['password']];
         if (!empty($data['client_mac'])) $params['mac-address'] = $data['client_mac'];
         $m->raw('/ip/hotspot/active/login', $params);
       }
@@ -223,7 +230,6 @@ class AdminClientController extends Controller
       return $this->jsonOrBack($r, true, 'Login HOTSPOT berhasil (session aktif dibuat).');
     } catch (\Throwable $e) {
       $msg = $e->getMessage() ?: 'Gagal login.';
-      // Mikrotik biasanya melempar ini persis:
       if (stripos($msg, 'invalid user name or password') !== false) {
         $msg = 'Username atau password tidak valid.';
       }
@@ -232,6 +238,31 @@ class AdminClientController extends Controller
       }
       return $this->jsonOrBack($r, false, $msg);
     }
+  }
+
+  // Helper baru (letakkan di bawah helper lain)
+  private function detectClientIpFromRouter(MikrotikClient $m, ?string $mac): ?string
+  {
+    try {
+      // 1) Kalau ada MAC → langsung cari hostnya
+      if ($mac) {
+        $rows = $m->raw('/ip/hotspot/host/print', ['mac-address' => $mac]);
+        if (is_array($rows) && !empty($rows[0]['address'])) {
+          return $rows[0]['address'];
+        }
+      }
+
+      // 2) Tanpa MAC: kalau hanya ada SATU host terdeteksi, pakai IP-nya (best-effort)
+      $hosts = $m->raw('/ip/hotspot/host/print');
+      if (is_array($hosts) && count($hosts) === 1) {
+        return $hosts[0]['address'] ?? null;
+      }
+
+      // (opsional) bisa difilter "authorized"==false, tapi banyak variasi; kita simple saja
+    } catch (\Throwable $e) {
+      // diamkan → return null
+    }
+    return null;
   }
 
   /* ===================== Helpers ===================== */
