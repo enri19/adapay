@@ -299,4 +299,30 @@ class AdminClientController extends Controller
     return rtrim($base.'/'.ltrim($parts['path'] ?? '', '/'), '/').'/login';
   }
 
+  private function configureMtForClient(MikrotikClient $mt, Client $client): MikrotikClient
+  {
+    $router = [
+      'host' => (string) $client->router_host,
+      'port' => (int)   ($client->router_port ?: 8728),
+      'user' => (string) $client->router_user,
+      'pass' => (string) $client->router_pass,
+    ];
+
+    if (empty($router['host']) || empty($router['user']) || empty($router['pass'])) {
+      throw new \RuntimeException('Konfigurasi router belum lengkap (host/user/pass).');
+    }
+
+    if (method_exists($mt, 'withConfig')) {
+      $new = $mt->withConfig($router);
+      if ($new instanceof MikrotikClient) return $new;
+    }
+    if (method_exists($mt, 'connect')) {
+      $mt->connect($router['host'], $router['port'], $router['user'], $router['pass']);
+      return $mt;
+    }
+    if (method_exists(app(), 'makeWith')) {
+      return app()->makeWith(MikrotikClient::class, ['config' => $router]);
+    }
+    return $mt;
+  }
 }
