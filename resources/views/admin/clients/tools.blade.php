@@ -48,7 +48,7 @@
       <div class="help">
         {{ $client->router_host ?: '—' }}:{{ $client->router_port ?: 8728 }} — user: {{ $client->router_user ?: '—' }}
       </div>
-      <form method="POST" action="{{ route('admin.clients.router.test',$client) }}" style="margin-top:.75rem">
+      <form method="POST" action="{{ route('admin.clients.router.test',$client) }}" class="tool-form" style="margin-top:.75rem">
         @csrf
         <button class="btn btn--primary">Jalankan Test</button>
       </form>
@@ -62,7 +62,7 @@
       <div style="font-weight:700;margin-bottom:.25rem">Buat User Hotspot (Test)</div>
       <div class="help">Buat/overwrite user test di router ini.</div>
 
-      <form method="POST" action="{{ route('admin.clients.router.hotspot-test-user',$client) }}" class="form" style="margin-top:.5rem">
+      <form method="POST" action="{{ route('admin.clients.router.hotspot-test-user',$client) }}" class="form tool-form" style="margin-top:.5rem">
         @csrf
         <div class="form-grid form-2">
           <div>
@@ -133,7 +133,7 @@
       Portal saat ini: <span class="mono">{{ $client->hotspot_portal ?: '—' }}</span>
     </div>
 
-    <form method="POST" action="{{ route('admin.clients.router.hotspot-login-test',$client) }}" class="form" style="margin-top:.5rem">
+    <form method="POST" action="{{ route('admin.clients.router.hotspot-login-test',$client) }}" class="form tool-form" style="margin-top:.5rem">
       @csrf
       <div class="form-grid form-2">
         <div>
