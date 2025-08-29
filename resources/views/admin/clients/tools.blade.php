@@ -1,6 +1,35 @@
 @extends('layouts.admin')
 @section('title','Router & Hotspot Tools')
 
+@push('head')
+<style>
+  /* posisi relatif supaya overlay nempel */
+  .tool-card{ position:relative; }
+
+  /* overlay loader */
+  .loader-overlay{
+    position:absolute; inset:0; border-radius:.75rem;
+    background:rgba(255,255,255,.75);
+    display:flex; align-items:center; justify-content:center;
+    z-index:20; backdrop-filter:saturate(120%) blur(1px);
+    opacity:0; pointer-events:none; transition:opacity .15s ease;
+  }
+  .tool-card.is-loading .loader-overlay{ opacity:1; pointer-events:auto; }
+
+  /* spinner besar */
+  .loader{
+    display:flex; align-items:center; gap:.6rem; font-weight:600; color:#374151;
+    font-size:.95rem;
+  }
+  .loader .ring{
+    width:22px; height:22px; border-radius:999px;
+    border:3px solid rgba(0,0,0,.15); border-top-color:var(--b);
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg) } }
+</style>
+@endpush
+
 @section('content')
 <div class="container">
   <div class="card" style="margin-bottom:12px">
@@ -8,12 +37,13 @@
     <div class="help">Client: <span class="mono">{{ $client->client_id }}</span> — {{ $client->name }}</div>
   </div>
 
-  @if(session('ok'))    <div class="flash flash--ok">{{ session('ok') }}</div> @endif
-  @if(session('error')) <div class="flash flash--err">{{ session('error') }}</div> @endif
-
   <div class="form-grid form-2">
     {{-- Kartu: Test Koneksi Router --}}
-    <div class="card">
+    <div class="card tool-card">
+      <div class="loader-overlay" aria-hidden="true">
+        <div class="loader"><span class="ring"></span><span class="txt">Memproses…</span></div>
+      </div>
+      
       <div style="font-weight:700;margin-bottom:.25rem">Test Koneksi Router</div>
       <div class="help">
         {{ $client->router_host ?: '—' }}:{{ $client->router_port ?: 8728 }} — user: {{ $client->router_user ?: '—' }}
@@ -25,7 +55,10 @@
     </div>
 
     {{-- Kartu: Buat User Hotspot (Test) --}}
-    <div class="card">
+    <div class="card tool-card">
+      <div class="loader-overlay" aria-hidden="true">
+        <div class="loader"><span class="ring"></span><span class="txt">Memproses…</span></div>
+      </div>
       <div style="font-weight:700;margin-bottom:.25rem">Buat User Hotspot (Test)</div>
       <div class="help">Buat/overwrite user test di router ini.</div>
 
@@ -90,7 +123,10 @@
   </div>
 
   {{-- Kartu: Test Login Hotspot User (via portal) --}}
-  <div class="card" style="margin-top:12px">
+  <div class="card tool-card" style="margin-top:12px">
+    <div class="loader-overlay" aria-hidden="true">
+      <div class="loader"><span class="ring"></span><span class="txt">Memproses…</span></div>
+    </div>
     <div style="font-weight:700;margin-bottom:.25rem">Test Login Hotspot (Portal)</div>
     <div class="help">
       Sistem akan mengirim POST ke portal hotspot (server harus bisa menjangkaunya).
@@ -126,3 +162,33 @@
   </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+  (function(){
+    document.addEventListener('DOMContentLoaded', function(){
+      // Nyalakan overlay loader tiap submit form tools
+      document.querySelectorAll('.tool-form').forEach(function(form){
+        form.addEventListener('submit', function(e){
+          // cari card terdekat
+          var card = form.closest('.tool-card');
+          if(!card) return;
+          var overlay = card.querySelector('.loader-overlay');
+          var txt = overlay && overlay.querySelector('.txt');
+          if (txt && form.dataset.loading) txt.textContent = form.dataset.loading;
+
+          // tampilkan
+          card.classList.add('is-loading');
+
+          // cegah double-click: disable semua tombol submit di form ini
+          form.querySelectorAll('button[type="submit"], input[type="submit"]').forEach(function(btn){
+            btn.setAttribute('disabled','disabled');
+          });
+
+          // biarkan submit lanjut (halaman akan reload → overlay otomatis hilang)
+        }, {capture:true});
+      });
+    });
+  })();
+</script>
+@endpush
