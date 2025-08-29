@@ -110,25 +110,24 @@ class AdminClientController extends Controller
   {
     try {
       $m = $this->mtFor($mt, $client);
-
-      if (method_exists($m, 'ping')) $m->ping();
-      else $m->raw('/system/identity/print');
-
-      $info = method_exists($m, 'getSystemInfo') ? (array) $m->getSystemInfo() : [];
+      if (method_exists($m,'ping')) $m->ping(); else $m->raw('/system/identity/print');
+      $info = method_exists($m,'getSystemInfo') ? (array)$m->getSystemInfo() : [];
       $msg  = 'Tersambung ke router.';
       if (!empty($info)) {
-        $msg = sprintf(
-          'Tersambung: %s%s%s%s',
+        $msg = sprintf('Tersambung: %s%s%s%s',
           $info['identity'] ?? 'router',
           !empty($info['board'])   ? ' ('.$info['board'].')'   : '',
           !empty($info['version']) ? ' v'.$info['version']     : '',
           !empty($info['uptime'])  ? ', uptime '.$info['uptime']: ''
         );
       }
-
       return $this->jsonOrBack($r, true, $msg);
     } catch (\Throwable $e) {
-      return $this->jsonOrBack($r, false, 'Gagal konek: '.$e->getMessage());
+      $msg = $e->getMessage() ?: 'Gagal konek.';
+      if (stripos($msg, 'invalid user name or password') !== false) {
+        $msg = 'User/Password API router salah. Pastikan memakai **/user** (system user), bukan hotspot user.';
+      }
+      return $this->jsonOrBack($r, false, 'Gagal konek: '.$msg);
     }
   }
 
