@@ -36,6 +36,7 @@
     <div style="font-weight:700">Router & Hotspot Tools</div>
     <div class="help">
       Client: <span class="mono">{{ $client->client_id }}</span> — {{ $client->name }}
+      <span class="help"> • API: {{ $client->router_host ?: '—' }}:{{ $client->router_port ?: 8728 }}</span>
       @isset($online)
         @if($online)
           <span class="pill pill--ok" style="margin-left:.5rem">Router Online</span>
@@ -65,6 +66,8 @@
         style="margin-top:.75rem">
         @csrf
         <input type="hidden" name="ajax" value="1">
+        <input type="hidden" name="router_host" value="{{ $client->router_host }}">
+        <input type="hidden" name="router_port" value="{{ $client->router_port ?: 8728 }}">
         <button class="btn btn--primary">Jalankan Test</button>
       </form>
     </div>
@@ -85,6 +88,8 @@
         style="margin-top:.5rem">
         @csrf
         <input type="hidden" name="ajax" value="1">
+        <input type="hidden" name="router_host" value="{{ $client->router_host }}">
+        <input type="hidden" name="router_port" value="{{ $client->router_port ?: 8728 }}">
         <div class="form-grid form-2">
           <div>
             <label class="label">Mode</label>
@@ -161,7 +166,8 @@
       data-loading="Menguji login hotspot…">
       @csrf
       <input type="hidden" name="ajax" value="1">
-
+      <input type="hidden" name="router_host" value="{{ $client->router_host }}">
+      <input type="hidden" name="router_port" value="{{ $client->router_port ?: 8728 }}">
       <div class="form-grid form-2">
         <div>
           <label class="label">Username</label>

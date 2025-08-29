@@ -112,7 +112,7 @@ class AdminClientController extends Controller
   public function routerTest(Request $r, Client $client, MikrotikClient $mt)
   {
     try {
-      $m = $this->mtFor($mt, $client);
+      $m = $this->mtFor($mt, $client, $r);
 
       if (method_exists($m, 'ping')) {
         $m->ping();
@@ -172,7 +172,7 @@ class AdminClientController extends Controller
       $limit   = (string) ($data['limit'] ?? '10m');
 
       try {
-          $m = $this->mtFor($mt, $client);
+          $m = $this->mtFor($mt, $client, $r);
           $comment = 'created-by-admin-test '.now()->format('Y-m-d H:i:s');
 
           // Signature 5 argumen (tanpa server) sesuai service kamu
@@ -205,7 +205,7 @@ class AdminClientController extends Controller
       ]);
 
       try {
-          $m = $this->mtFor($mt, $client);
+          $m = $this->mtFor($mt, $client, $r);
 
           if (method_exists($m, 'hotspotActiveLogin')) {
               $m->hotspotActiveLogin($data['client_ip'], $data['username'], $data['password'], $data['client_mac'] ?: null);
@@ -231,17 +231,25 @@ class AdminClientController extends Controller
   /**
    * Build instance MikrotikClient yang sudah terkonfigurasi untuk client.
    */
-  private function mtFor(MikrotikClient $mt, Client $client): MikrotikClient
+  private function mtFor(MikrotikClient $mt, Client $client, ?Request $r = null): MikrotikClient
   {
+      // nilai default dari DB
       $router = [
           'host' => (string) $client->router_host,
           'port' => (int)   ($client->router_port ?: 8728),
           'user' => (string) $client->router_user,
           'pass' => (string) $client->router_pass,
-          // ssl akan diatur otomatis oleh withConfig() jika port 8729
       ];
 
-      if (empty($router['host']) || empty($router['user']) || empty($router['pass'])) {
+      // override dari request (jika dikirim dari view)
+      if ($r) {
+          $ovhHost = trim((string) $r->input('router_host',''));
+          $ovhPort = $r->input('router_port');
+          if ($ovhHost !== '') $router['host'] = $ovhHost;
+          if ($ovhPort !== null && $ovhPort !== '') $router['port'] = (int) $ovhPort;
+      }
+
+      if ($router['host'] === '' || $router['user'] === '' || $router['pass'] === '') {
           throw new \RuntimeException('Konfigurasi router belum lengkap (host/user/pass).');
       }
 
@@ -249,13 +257,10 @@ class AdminClientController extends Controller
           $new = $mt->withConfig($router);
           return ($new instanceof MikrotikClient) ? $new : $mt;
       }
-
-      // Jika implementasi lama pakai connect(), tinggal tambah di service & panggil di sini.
       if (method_exists($mt, 'connect')) {
           $mt->connect($router['host'], $router['port'], $router['user'], $router['pass']);
           return $mt;
       }
-
       return $mt;
   }
 
