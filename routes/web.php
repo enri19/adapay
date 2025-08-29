@@ -66,6 +66,14 @@ Route::prefix('admin')->as('admin.')->middleware(['auth'])->group(function () {
       Route::get('/{client}/edit',   [AdminClientController::class, 'edit'])->name('edit');
       Route::put('/{client}',        [AdminClientController::class, 'update'])->name('update');
       Route::delete('/{client}',     [AdminClientController::class, 'destroy'])->name('destroy');
+
+      // Halaman alat router/hotspot
+      Route::get('/{client}/tools',  [AdminClientController::class, 'tools'])->name('tools');
+
+      // Aksi
+      Route::post('/{client}/router/test',                [AdminClientController::class, 'routerTest'])->name('router.test');
+      Route::post('/{client}/router/hotspot-test-user',   [AdminClientController::class, 'routerHotspotTestUser'])->name('router.hotspot-test-user');
+      Route::post('/{client}/router/hotspot-login-test',  [AdminClientController::class, 'routerHotspotLoginTest'])->name('router.hotspot-login-test');
     });
     
     // Users Management

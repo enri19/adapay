@@ -43,6 +43,7 @@
               @else <span class="pill pill--off">Nonaktif</span> @endif
             </td>
             <td style="text-align:right;white-space:nowrap">
+              <a href="{{ route('admin.clients.tools',$c) }}" class="btn">Tools</a>
               <a href="{{ route('admin.clients.edit',$c) }}" class="btn btn--ghost">Edit</a>
               <form action="{{ route('admin.clients.destroy',$c) }}" method="POST" style="display:inline" onsubmit="return confirm('Hapus client ini?')">
                 @csrf @method('DELETE')
