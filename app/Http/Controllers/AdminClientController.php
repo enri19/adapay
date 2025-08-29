@@ -188,7 +188,7 @@ class AdminClientController extends Controller
   /**
    * Test login ke portal hotspot (best effort):
    * - gunakan client->hotspot_portal (kalau ada)
-   * - kirim POST username/password (form field standar MikroTik)
+   * - kirim POST host, port, username dan password (form field standar MikroTik)
    * - catatan: hanya bekerja bila server aplikasi bisa menjangkau portal tersebut
    */
   public function routerHotspotLoginTest(Request $r, Client $client)
@@ -196,81 +196,106 @@ class AdminClientController extends Controller
     $data = $r->validate([
       'username' => ['required','string','max:60'],
       'password' => ['required','string','max:120'],
-      'portal'   => ['nullable','string'], // biarkan url tidak tervalidasi ketat (bisa IP/HTTP lokal)
+      'portal'   => ['nullable','string'],          // opsional, tapi kita abaikan kalau host/port ada
+      'web_port' => ['nullable','integer','min:1','max:65535'],
+      'https'    => ['nullable'],                   // "on" / "1"
       'ajax'     => ['nullable'],
     ]);
 
-    $username = (string) $data['username'];
-    $password = (string) $data['password'];
-    $portal   = trim((string) ($data['portal'] ?: $client->hotspot_portal ?: ''));
+    $username   = (string) $data['username'];
+    $password   = (string) $data['password'];
+    $routerHost = trim((string) ($client->router_host ?? ''));
+    $webPort    = isset($data['web_port']) ? (int)$data['web_port'] : null;
+    $useHttps   = $r->boolean('https');
 
-    if ($portal === '') {
-      return $this->loginResp($r, false, 'Portal hotspot belum diisi (client.hotspot_portal).');
+    // SUSUN kandidat URL login:
+    $candidates = [];
+
+    // 0) Kalau user ngisi portal, tetap coba paling pertama
+    if (!empty($data['portal'])) {
+      $p = trim((string)$data['portal']);
+      if ($p !== '') $candidates[] = rtrim($p, '/');
     }
 
-    try {
-      // 1) GET portal untuk dapatkan link-login-only, dst, & CHAP
-      $http = Http::withOptions([
-        'timeout' => 10,
-        'verify'  => false,       // mikrotik sering pakai cert self-signed
-        'allow_redirects' => true,
-      ]);
-
-      $resp = $http->get($portal);
-      $html = (string) $resp->body();
-
-      // Extract values
-      $linkLoginOnly = $this->findMatch($html, '/link-login-only[^"\']*["\']([^"\']+)/i');
-      $dst           = $this->findMatch($html, '/name=[\'"]dst[\'"][^>]*value=[\'"]([^\'"]*)/i')
-                        ?? $this->findMatch($html, '/link-orig[^"\']*["\']([^"\']+)/i');
-
-      $chapId        = $this->findMatch($html, '/name=[\'"]chap-id[\'"][^>]*value=[\'"]([^\'"]+)/i');
-      $chapChallenge = $this->findMatch($html, '/name=[\'"]chap-challenge[\'"][^>]*value=[\'"]([^\'"]+)/i');
-
-      // Tentukan endpoint login
-      $loginUrl = $linkLoginOnly ?: $this->guessLoginUrl($portal);
-
-      // 2) Build payload: CHAP → hash md5(id + pass + challenge), else kirim plain
-      $payload = [
-        'username' => $username,
-        'dst'      => $dst ?: '',
-        'popup'    => 'true',
-      ];
-
-      if ($chapId && $chapChallenge) {
-        $passHashed = md5(chr(hexdec($chapId)).$password.hex2bin($chapChallenge));
-        // Banyak template MikroTik mengirim field "password" berisi hash MD5 (bukan "response")
-        $payload['password'] = $passHashed;
+    // 1) Pakai router_host + web_port dari form
+    if ($routerHost !== '') {
+      if ($webPort) {
+        $scheme = $useHttps ? 'https' : 'http';
+        $candidates[] = "{$scheme}://{$routerHost}:{$webPort}/login";
       } else {
-        $payload['password'] = $password;
+        // 2) Coba port umum hotspot & web
+        foreach ([['http',64872],['http',80],['http',8080],['https',64873],['https',443]] as $p) {
+          $candidates[] = "{$p[0]}://{$routerHost}:{$p[1]}/login";
+        }
       }
-
-      // 3) POST login
-      $post = $http->asForm()->withHeaders(['Referer'=>$portal])->post($loginUrl, $payload);
-      $body = (string) $post->body();
-      $loc  = $post->header('Location');
-
-      // 4) Heuristik sukses
-      $ok = false;
-      if ($post->status() >= 300 && $post->status() < 400 && $loc) {
-        $ok = Str::contains($loc, ['/status', 'status', 'success']);
-      }
-      if (!$ok) {
-        $ok = Str::contains(Str::lower($body), ['logout', 'logged in', 'login-ok']);
-      }
-
-      if ($ok) {
-        return $this->loginResp($r, true, 'Login HOTSPOT OK (respon portal menunjukkan sukses).');
-      }
-
-      $snippet = mb_substr(trim(strip_tags($body ?: '')), 0, 200);
-      return $this->loginResp($r, false, 'Login HOTSPOT gagal / respon tidak dikenali. Potongan: '.$snippet);
-    } catch (\Throwable $e) {
-      return $this->loginResp($r, false, 'Tidak bisa menghubungi portal: '.$e->getMessage());
     }
+
+    if (empty($candidates)) {
+      return $this->loginResp($r, false, 'Router host kosong; isi host di data Client.');
+    }
+
+    $http = Http::withOptions([
+      'timeout' => 10,
+      'verify'  => false,           // hotspot/ssl mikrotik sering self-signed
+      'allow_redirects' => true,
+    ]);
+
+    foreach ($candidates as $loginPage) {
+      try {
+        // 1) GET login page untuk ambil link-login-only, dst, CHAP
+        $res  = $http->get($loginPage);
+        $html = (string) $res->body();
+
+        $linkLoginOnly = $this->findMatch($html, '/name=[\'"]link-login-only[\'"][^>]*value=[\'"]([^\'"]+)/i')
+                          ?: $this->findMatch($html, '/id=[\'"]link-login-only[\'"][^>]*href=[\'"]([^\'"]+)/i');
+        $dst           = $this->findMatch($html, '/name=[\'"]dst[\'"][^>]*value=[\'"]([^\'"]*)/i')
+                          ?: $this->findMatch($html, '/name=[\'"]link-orig[\'"][^>]*value=[\'"]([^\'"]*)/i');
+
+        $chapId        = $this->findMatch($html, '/name=[\'"]chap-id[\'"][^>]*value=[\'"]([^\'"]+)/i');
+        $chapChallenge = $this->findMatch($html, '/name=[\'"]chap-challenge[\'"][^>]*value=[\'"]([^\'"]+)/i');
+
+        $postUrl = $linkLoginOnly ? $this->resolveUrl($loginPage, $linkLoginOnly) : $loginPage;
+
+        // 2) Siapkan payload (CHAP-aware)
+        $payload = [
+          'username' => $username,
+          'dst'      => $dst ?: '',
+          'popup'    => 'true',
+        ];
+        if ($chapId && $chapChallenge) {
+          $payload['password'] = md5(chr(hexdec($chapId)).$password.hex2bin($chapChallenge));
+        } else {
+          $payload['password'] = $password;
+        }
+
+        // 3) POST login
+        $post = $http->asForm()->withHeaders(['Referer' => $loginPage])->post($postUrl, $payload);
+        $body = (string) $post->body();
+        $loc  = $post->header('Location');
+        $ok   = false;
+
+        if ($post->status() >= 300 && $post->status() < 400 && $loc) {
+          $ok = Str::contains(Str::lower($loc), ['status','logout','login-ok','success']);
+        }
+        if (!$ok) {
+          $ok = Str::contains(Str::lower($body), ['logout','you are logged in','login-ok']);
+        }
+
+        if ($ok) {
+          return $this->loginResp($r, true, 'Login HOTSPOT OK via ' . $postUrl);
+        }
+
+        // kalau gagal, coba kandidat berikutnya
+      } catch (\Throwable $e) {
+        // lanjut kandidat berikutnya
+      }
+    }
+
+    return $this->loginResp($r, false,
+      'Gagal menguji login. Server tidak bisa menjangkau hotspot di host/port yang dicoba atau respon tidak dikenali.'
+    );
   }
 
-  // helper kecil
   private function loginResp(Request $r, bool $ok, string $msg)
   {
     if ($r->ajax() || $r->wantsJson() || $r->boolean('ajax')) {
@@ -285,6 +310,18 @@ class AdminClientController extends Controller
       return $m[1] ?? null;
     }
     return null;
+  }
+
+  private function resolveUrl(string $base, string $rel): string
+  {
+    if (preg_match('#^https?://#i', $rel)) return $rel;
+    $u = parse_url($base);
+    $scheme = $u['scheme'] ?? 'http';
+    $host   = $u['host']   ?? '';
+    $port   = isset($u['port']) ? ':'.$u['port'] : '';
+    if (strpos($rel, '/') === 0) return "{$scheme}://{$host}{$port}{$rel}";
+    $path = isset($u['path']) ? rtrim(dirname($u['path']),'/') : '';
+    return "{$scheme}://{$host}{$port}{$path}/{$rel}";
   }
 
   private function guessLoginUrl(string $portal): string

@@ -145,14 +145,14 @@
       Portal saat ini: <span class="mono">{{ $client->hotspot_portal ?: '—' }}</span>
     </div>
 
-    <form
-      method="POST"
-      action="{{ route('admin.clients.router.hotspot-login-test',$client) }}" 
+    <form method="POST"
+      action="{{ route('admin.clients.router.hotspot-login-test',$client) }}"
       class="form tool-form"
-      data-loading="Menghubungkan router…"
-      style="margin-top:.5rem">
+      style="margin-top:.5rem"
+      data-loading="Menguji login hotspot…">
       @csrf
       <input type="hidden" name="ajax" value="1">
+
       <div class="form-grid form-2">
         <div>
           <label class="label">Username</label>
@@ -162,13 +162,29 @@
           <label class="label">Password</label>
           <div class="control"><input class="input mono" name="password" required></div>
         </div>
+
+        <div>
+          <label class="label">Web Port</label>
+          <div class="control">
+            <input class="input" type="number" name="web_port" placeholder="64872 (http) / 64873 (https)">
+          </div>
+          <div class="help">Kosongkan untuk coba otomatis: 64872, 80, 8080, 64873, 443</div>
+        </div>
+        <div>
+          <label class="label">HTTPS</label>
+          <div class="control" style="gap:.5rem">
+            <input type="checkbox" name="https" value="1">
+            <span class="help">Centang jika hotspot login via HTTPS</span>
+          </div>
+        </div>
+
         <div class="form-2" style="grid-column:1/-1">
           <div>
             <label class="label">Portal URL (opsional)</label>
             <div class="control">
-              <input class="input" name="portal" value="{{ $client->hotspot_portal }}" placeholder="http://router/login">
+              <input class="input" name="portal" value="" placeholder="http://x.x.x.x:64872/login">
             </div>
-            <div class="help">Jika kosong, pakai Portal Domain di client.</div>
+            <div class="help">Jika diisi, akan dicoba dulu. Kalau kosong, pakai router host & port di atas.</div>
           </div>
         </div>
       </div>
@@ -190,7 +206,6 @@
     box.textContent = text;
     var main = document.querySelector('.main');
     main && main.insertBefore(box, main.firstChild);
-    // auto hide
     setTimeout(()=>{ box.remove(); }, 6000);
   }
 
@@ -203,13 +218,11 @@
     if (txt && form.dataset.loading) txt.textContent = form.dataset.loading;
     card.classList.add('is-loading');
 
-    // disable submit(s)
     const btns = form.querySelectorAll('button[type="submit"],input[type="submit"]');
     btns.forEach(b=>b.setAttribute('disabled','disabled'));
 
-    // build form data
     const fd = new FormData(form);
-    fd.set('ajax', '1'); // minta JSON
+    fd.set('ajax','1');
     const csrf = form.querySelector('input[name="_token"]')?.value || '';
 
     return fetch(form.action, {
@@ -222,27 +235,26 @@
       body: fd,
       credentials: 'same-origin'
     })
-    .then(async (res)=>{
+    .then(async res => {
       let json = null;
       try { json = await res.json(); } catch(e){}
-      const ok = res.ok && json && json.ok !== false;
+      const ok  = res.ok && json && json.ok !== false;
       const msg = (json && json.message) ? json.message : (ok ? 'Berhasil.' : 'Terjadi kesalahan.');
       flash(ok ? 'ok' : 'err', msg);
     })
-    .catch((err)=>{
+    .catch(err => {
       flash('err', 'Gagal mengirim permintaan: ' + (err?.message || err));
     })
-    .finally(()=>{
+    .finally(() => {
       card.classList.remove('is-loading');
       btns.forEach(b=>b.removeAttribute('disabled'));
-      form.reset && form.reset(); // reset form kecil (opsional)
     });
   }
 
   document.addEventListener('DOMContentLoaded', function(){
     document.querySelectorAll('.tool-form').forEach(function(form){
       form.addEventListener('submit', function(e){
-        e.preventDefault();
+        e.preventDefault(); // ← penting biar gak reload
         submitToolForm(form);
       }, {capture:true});
     });
