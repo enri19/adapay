@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use Illuminate\Http\Request;
 use App\Services\Mikrotik\MikrotikClient;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Http;
 
 class AdminClientController extends Controller
@@ -104,7 +105,6 @@ class AdminClientController extends Controller
   {
     try {
       $mtClient = $this->configureMtForClient($mt, $client);
-
       if (method_exists($mtClient, 'ping')) $mtClient->ping();
 
       $identity = $board = $version = $uptime = null;
@@ -124,9 +124,16 @@ class AdminClientController extends Controller
             $uptime  ? ", uptime $uptime" : ''
           )
         : 'Tersambung ke router.';
-      return back()->with('ok', $msg);
+
+      if ($r->ajax() || $r->wantsJson() || $r->boolean('ajax')) {
+        return response()->json(['ok'=>true,'message'=>$msg]);
+      }
+      return back()->with('ok',$msg);
     } catch (\Throwable $e) {
-      return back()->with('error', 'Gagal konek: '.$e->getMessage());
+      if ($r->ajax() || $r->wantsJson() || $r->boolean('ajax')) {
+        return response()->json(['ok'=>false,'message'=>'Gagal konek: '.$e->getMessage()], 500);
+      }
+      return back()->with('error','Gagal konek: '.$e->getMessage());
     }
   }
 
@@ -138,21 +145,20 @@ class AdminClientController extends Controller
       'password' => ['nullable','string','max:60'],
       'profile'  => ['nullable','string','max:120'],
       'server'   => ['nullable','string','max:120'],
-      'limit'    => ['nullable','string','max:20'], // contoh 10m, 1h
+      'limit'    => ['nullable','string','max:20'],
       'mode'     => ['nullable','in:userpass,code'],
     ]);
 
     $mode = strtolower((string) ($data['mode'] ?? $client->auth_mode ?? 'userpass'));
     if (!in_array($mode, ['userpass','code'], true)) $mode = 'userpass';
 
-    $suffix = now()->format('ymdHi');
-    $name = trim((string)($data['name'] ?? 'test-'.$suffix));
+    $suffix  = now()->format('ymdHi');
+    $name    = trim((string)($data['name'] ?? 'test-'.$suffix));
     if ($mode === 'code') {
       $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-      $code = '';
-      for ($i=0; $i<8; $i++) $code .= $alphabet[random_int(0, strlen($alphabet)-1)];
+      $code=''; for ($i=0;$i<8;$i++) $code .= $alphabet[random_int(0, strlen($alphabet)-1)];
       $password = $data['password'] ?? $code;
-      $name     = $data['name']     ?? $code; // samakan jika tak diisi
+      $name     = $data['name']     ?? $code;
     } else {
       $password = $data['password'] ?? 'pass-'.$suffix;
     }
@@ -164,12 +170,18 @@ class AdminClientController extends Controller
     try {
       $mtClient = $this->configureMtForClient($mt, $client);
       $comment  = 'created-by-admin-test '.now()->format('Y-m-d H:i:s');
-      // signature sesuai yang dipakai di HotspotProvisioner
       $mtClient->createHotspotUser($name, $password, $profile, $comment, $limit, $server ?: null);
 
-      return back()->with('ok', "User test dibuat: $name / $password (profile: $profile, limit: $limit)");
+      $msg = "User test dibuat: $name / $password (profile: $profile, limit: $limit)";
+      if ($r->ajax() || $r->wantsJson() || $r->boolean('ajax')) {
+        return response()->json(['ok'=>true,'message'=>$msg]);
+      }
+      return back()->with('ok',$msg);
     } catch (\Throwable $e) {
-      return back()->with('error', 'Gagal membuat user hotspot: '.$e->getMessage());
+      if ($r->ajax() || $r->wantsJson() || $r->boolean('ajax')) {
+        return response()->json(['ok'=>false,'message'=>'Gagal membuat user hotspot: '.$e->getMessage()], 500);
+      }
+      return back()->with('error','Gagal membuat user hotspot: '.$e->getMessage());
     }
   }
 
@@ -184,66 +196,107 @@ class AdminClientController extends Controller
     $data = $r->validate([
       'username' => ['required','string','max:60'],
       'password' => ['required','string','max:120'],
-      'portal'   => ['nullable','url'],
+      'portal'   => ['nullable','string'], // biarkan url tidak tervalidasi ketat (bisa IP/HTTP lokal)
+      'ajax'     => ['nullable'],
     ]);
 
-    $portal = $data['portal'] ?? $client->hotspot_portal ?? null;
-    if (!$portal) {
-      return back()->with('error','Portal hotspot belum diisi (client.hotspot_portal).');
+    $username = (string) $data['username'];
+    $password = (string) $data['password'];
+    $portal   = trim((string) ($data['portal'] ?: $client->hotspot_portal ?: ''));
+
+    if ($portal === '') {
+      return $this->loginResp($r, false, 'Portal hotspot belum diisi (client.hotspot_portal).');
     }
 
     try {
-      // biasanya form login mikrotik menerima username/password (tanpa CSRF).
-      $resp = Http::timeout(8)->asForm()->post($portal, [
-        'username' => $data['username'],
-        'password' => $data['password'],
+      // 1) GET portal untuk dapatkan link-login-only, dst, & CHAP
+      $http = Http::withOptions([
+        'timeout' => 10,
+        'verify'  => false,       // mikrotik sering pakai cert self-signed
+        'allow_redirects' => true,
       ]);
 
+      $resp = $http->get($portal);
+      $html = (string) $resp->body();
+
+      // Extract values
+      $linkLoginOnly = $this->findMatch($html, '/link-login-only[^"\']*["\']([^"\']+)/i');
+      $dst           = $this->findMatch($html, '/name=[\'"]dst[\'"][^>]*value=[\'"]([^\'"]*)/i')
+                        ?? $this->findMatch($html, '/link-orig[^"\']*["\']([^"\']+)/i');
+
+      $chapId        = $this->findMatch($html, '/name=[\'"]chap-id[\'"][^>]*value=[\'"]([^\'"]+)/i');
+      $chapChallenge = $this->findMatch($html, '/name=[\'"]chap-challenge[\'"][^>]*value=[\'"]([^\'"]+)/i');
+
+      // Tentukan endpoint login
+      $loginUrl = $linkLoginOnly ?: $this->guessLoginUrl($portal);
+
+      // 2) Build payload: CHAP → hash md5(id + pass + challenge), else kirim plain
+      $payload = [
+        'username' => $username,
+        'dst'      => $dst ?: '',
+        'popup'    => 'true',
+      ];
+
+      if ($chapId && $chapChallenge) {
+        $passHashed = md5(chr(hexdec($chapId)).$password.hex2bin($chapChallenge));
+        // Banyak template MikroTik mengirim field "password" berisi hash MD5 (bukan "response")
+        $payload['password'] = $passHashed;
+      } else {
+        $payload['password'] = $password;
+      }
+
+      // 3) POST login
+      $post = $http->asForm()->withHeaders(['Referer'=>$portal])->post($loginUrl, $payload);
+      $body = (string) $post->body();
+      $loc  = $post->header('Location');
+
+      // 4) Heuristik sukses
       $ok = false;
-      $text = (string) $resp->body();
-      // heuristik sederhana: cari tanda sukses umum
-      if ($resp->successful()) {
-        $ok = stripos($text, 'Logout') !== false
-          || stripos($text, 'You are logged in') !== false
-          || stripos($text, 'login-ok') !== false;
+      if ($post->status() >= 300 && $post->status() < 400 && $loc) {
+        $ok = Str::contains($loc, ['/status', 'status', 'success']);
+      }
+      if (!$ok) {
+        $ok = Str::contains(Str::lower($body), ['logout', 'logged in', 'login-ok']);
       }
 
       if ($ok) {
-        return back()->with('ok', 'Login HOTSPOT OK (respon portal menunjukkan sukses).');
+        return $this->loginResp($r, true, 'Login HOTSPOT OK (respon portal menunjukkan sukses).');
       }
-      // tampilkan potongan error untuk debug
-      $snippet = mb_substr(trim(strip_tags($text)), 0, 200);
-      return back()->with('error', 'Login HOTSPOT gagal / respon tidak dikenali. Potongan: '.$snippet);
+
+      $snippet = mb_substr(trim(strip_tags($body ?: '')), 0, 200);
+      return $this->loginResp($r, false, 'Login HOTSPOT gagal / respon tidak dikenali. Potongan: '.$snippet);
     } catch (\Throwable $e) {
-      return back()->with('error', 'Tidak bisa menghubungi portal: '.$e->getMessage());
+      return $this->loginResp($r, false, 'Tidak bisa menghubungi portal: '.$e->getMessage());
     }
   }
 
-  /** Samakan cara set koneksi dengan HotspotProvisioner */
-  private function configureMtForClient(MikrotikClient $mt, Client $client): MikrotikClient
+  // helper kecil
+  private function loginResp(Request $r, bool $ok, string $msg)
   {
-    $router = [
-      'host' => (string) $client->router_host,
-      'port' => (int)   ($client->router_port ?: 8728),
-      'user' => (string) $client->router_user,
-      'pass' => (string) $client->router_pass,
-    ];
-
-    if (empty($router['host']) || empty($router['user']) || empty($router['pass'])) {
-      throw new \RuntimeException('Konfigurasi router belum lengkap (host/user/pass).');
+    if ($r->ajax() || $r->wantsJson() || $r->boolean('ajax')) {
+      return response()->json(['ok'=>$ok,'message'=>$msg], $ok ? 200 : 422);
     }
-
-    if (method_exists($mt, 'withConfig')) {
-      $new = $mt->withConfig($router);
-      if ($new instanceof MikrotikClient) return $new;
-    }
-    if (method_exists($mt, 'connect')) {
-      $mt->connect($router['host'], $router['port'], $router['user'], $router['pass']);
-      return $mt;
-    }
-    if (method_exists(app(), 'makeWith')) {
-      return app()->makeWith(MikrotikClient::class, ['config' => $router]);
-    }
-    return $mt;
+    return $ok ? back()->with('ok',$msg) : back()->with('error',$msg);
   }
+
+  private function findMatch(string $html, string $regex): ?string
+  {
+    if (preg_match($regex, $html, $m)) {
+      return $m[1] ?? null;
+    }
+    return null;
+  }
+
+  private function guessLoginUrl(string $portal): string
+  {
+    // jika portal sudah /login → pakai itu; else tambahkan /login
+    if (Str::endsWith(parse_url($portal, PHP_URL_PATH) ?? '', '/login')) {
+      return $portal;
+    }
+    // buat absolut
+    $parts = parse_url($portal);
+    $base  = ($parts['scheme'] ?? 'http').'://'.$parts['host'].(isset($parts['port'])?':'.$parts['port']:'');
+    return rtrim($base.'/'.ltrim($parts['path'] ?? '', '/'), '/').'/login';
+  }
+
 }

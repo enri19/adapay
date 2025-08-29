@@ -48,8 +48,14 @@
       <div class="help">
         {{ $client->router_host ?: '—' }}:{{ $client->router_port ?: 8728 }} — user: {{ $client->router_user ?: '—' }}
       </div>
-      <form method="POST" action="{{ route('admin.clients.router.test',$client) }}" class="tool-form" style="margin-top:.75rem">
+      <form
+        method="POST"
+        action="{{ route('admin.clients.router.test',$client) }}"
+        class="tool-form"
+        data-loading="Menghubungkan router…"
+        style="margin-top:.75rem">
         @csrf
+        <input type="hidden" name="ajax" value="1">
         <button class="btn btn--primary">Jalankan Test</button>
       </form>
     </div>
@@ -62,8 +68,14 @@
       <div style="font-weight:700;margin-bottom:.25rem">Buat User Hotspot (Test)</div>
       <div class="help">Buat/overwrite user test di router ini.</div>
 
-      <form method="POST" action="{{ route('admin.clients.router.hotspot-test-user',$client) }}" class="form tool-form" style="margin-top:.5rem">
+      <form
+        method="POST"
+        action="{{ route('admin.clients.router.hotspot-test-user',$client) }}"
+        class="form tool-form"
+        data-loading="Menghubungkan router…"
+        style="margin-top:.5rem">
         @csrf
+        <input type="hidden" name="ajax" value="1">
         <div class="form-grid form-2">
           <div>
             <label class="label">Mode</label>
@@ -133,8 +145,14 @@
       Portal saat ini: <span class="mono">{{ $client->hotspot_portal ?: '—' }}</span>
     </div>
 
-    <form method="POST" action="{{ route('admin.clients.router.hotspot-login-test',$client) }}" class="form tool-form" style="margin-top:.5rem">
+    <form
+      method="POST"
+      action="{{ route('admin.clients.router.hotspot-login-test',$client) }}" 
+      class="form tool-form"
+      data-loading="Menghubungkan router…"
+      style="margin-top:.5rem">
       @csrf
+      <input type="hidden" name="ajax" value="1">
       <div class="form-grid form-2">
         <div>
           <label class="label">Username</label>
@@ -165,30 +183,70 @@
 
 @push('scripts')
 <script>
-  (function(){
-    document.addEventListener('DOMContentLoaded', function(){
-      // Nyalakan overlay loader tiap submit form tools
-      document.querySelectorAll('.tool-form').forEach(function(form){
-        form.addEventListener('submit', function(e){
-          // cari card terdekat
-          var card = form.closest('.tool-card');
-          if(!card) return;
-          var overlay = card.querySelector('.loader-overlay');
-          var txt = overlay && overlay.querySelector('.txt');
-          if (txt && form.dataset.loading) txt.textContent = form.dataset.loading;
+(function(){
+  function flash(type, text){
+    var box = document.createElement('div');
+    box.className = 'flash ' + (type==='ok' ? 'flash--ok' : 'flash--err');
+    box.textContent = text;
+    var main = document.querySelector('.main');
+    main && main.insertBefore(box, main.firstChild);
+    // auto hide
+    setTimeout(()=>{ box.remove(); }, 6000);
+  }
 
-          // tampilkan
-          card.classList.add('is-loading');
+  function submitToolForm(form){
+    const card = form.closest('.tool-card');
+    if (!card) return;
 
-          // cegah double-click: disable semua tombol submit di form ini
-          form.querySelectorAll('button[type="submit"], input[type="submit"]').forEach(function(btn){
-            btn.setAttribute('disabled','disabled');
-          });
+    const overlay = card.querySelector('.loader-overlay');
+    const txt = overlay && overlay.querySelector('.txt');
+    if (txt && form.dataset.loading) txt.textContent = form.dataset.loading;
+    card.classList.add('is-loading');
 
-          // biarkan submit lanjut (halaman akan reload → overlay otomatis hilang)
-        }, {capture:true});
-      });
+    // disable submit(s)
+    const btns = form.querySelectorAll('button[type="submit"],input[type="submit"]');
+    btns.forEach(b=>b.setAttribute('disabled','disabled'));
+
+    // build form data
+    const fd = new FormData(form);
+    fd.set('ajax', '1'); // minta JSON
+    const csrf = form.querySelector('input[name="_token"]')?.value || '';
+
+    return fetch(form.action, {
+      method: form.method || 'POST',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-TOKEN': csrf,
+        'Accept': 'application/json'
+      },
+      body: fd,
+      credentials: 'same-origin'
+    })
+    .then(async (res)=>{
+      let json = null;
+      try { json = await res.json(); } catch(e){}
+      const ok = res.ok && json && json.ok !== false;
+      const msg = (json && json.message) ? json.message : (ok ? 'Berhasil.' : 'Terjadi kesalahan.');
+      flash(ok ? 'ok' : 'err', msg);
+    })
+    .catch((err)=>{
+      flash('err', 'Gagal mengirim permintaan: ' + (err?.message || err));
+    })
+    .finally(()=>{
+      card.classList.remove('is-loading');
+      btns.forEach(b=>b.removeAttribute('disabled'));
+      form.reset && form.reset(); // reset form kecil (opsional)
     });
-  })();
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    document.querySelectorAll('.tool-form').forEach(function(form){
+      form.addEventListener('submit', function(e){
+        e.preventDefault();
+        submitToolForm(form);
+      }, {capture:true});
+    });
+  });
+})();
 </script>
 @endpush
