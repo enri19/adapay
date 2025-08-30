@@ -1,7 +1,3 @@
-@php
-dd($client);
-@endphp
-
 @extends('layouts.admin')
 @section('title','Router & Hotspot Tools')
 
