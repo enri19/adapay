@@ -106,61 +106,80 @@ class AdminClientController extends Controller
 
   public function importVouchers(Request $r, Client $client)
   {
-    // Otorisasi dasar: admin boleh semua, non-admin hanya client miliknya
-    $user = $r->user();
-    $isAdmin = $this->userIsAdmin($user);
-    if (!$isAdmin && $this->requireUserClientId($user) !== strtoupper($client->client_id)) {
-      return response()->json(['ok'=>false, 'message'=>'Tidak diizinkan untuk client ini.'], 403);
-    }
-
-    $items = (array) $r->input('items', []);
-    if (empty($items)) {
-      return response()->json(['ok'=>false, 'message'=>'Tidak ada item yang dipilih.'], 422);
-    }
-
-    $new = 0; $updated = 0; $skipped = 0;
-
-    foreach ($items as $profile => $row) {
-      // hanya yang dicentang
-      $enabled = (string)($row['enabled'] ?? '') !== '' && (int)$row['enabled'] === 1;
-      if (!$enabled) { $skipped++; continue; }
-
-      $name   = trim((string)($row['name'] ?? '')) ?: ('Voucher ' . $profile);
-      $priceStr  = trim((string)($row['price'] ?? ''));
-      $hasPrice  = (bool) preg_match('/\d/', $priceStr); // ada digit?
-      $price     = $hasPrice ? $this->parseNominal($priceStr) : null;
-
-      $exists = HotspotVoucher::where('client_id', strtoupper($client->client_id))
-        ->where('profile', $profile)
-        ->where('name', $name)
-        ->first();
-
-      if ($exists) {
-        $payload = [
-          'duration_minutes' => $durMin,
-          'is_active'        => $active,
-        ];
-        if ($hasPrice) $payload['price'] = $price;   // hanya update harga kalau diisi
-        $exists->update($payload);
-        $updated++;
-      } else {
-        HotspotVoucher::create([
-          'client_id'        => strtoupper($client->client_id),
-          'name'             => $name,
-          'price'            => $price ?? 0,         // baru: kosong → 0
-          'duration_minutes' => $durMin,
-          'profile'          => $profile,
-          'code'             => null,
-          'is_active'        => $active,
-        ]);
-        $new++;
+    try {
+      $user = $r->user();
+      $isAdmin = $this->userIsAdmin($user);
+      if (!$isAdmin && $this->requireUserClientId($user) !== strtoupper($client->client_id)) {
+        return response()->json(['ok'=>false, 'message'=>'Tidak diizinkan untuk client ini.'], 403);
       }
-    }
 
-    return response()->json([
-      'ok' => true,
-      'message' => "Import selesai: {$new} baru, {$updated} update, {$skipped} dilewati."
-    ]);
+      $items = $r->input('items', []);
+      if (!is_array($items) || empty($items)) {
+        return response()->json(['ok'=>false, 'message'=>'Tidak ada item yang dipilih.'], 422);
+      }
+
+      $clientId = strtoupper($client->client_id);
+      $new = 0; $updated = 0; $skipped = 0;
+
+      DB::transaction(function() use ($items, $clientId, &$new, &$updated, &$skipped) {
+        foreach ($items as $k => $row) {
+          $enabled = (int)($row['enabled'] ?? 0) === 1;
+          if (!$enabled) { $skipped++; continue; }
+
+          $profile = trim((string)($row['profile'] ?? $k));
+          if ($profile === '') { $skipped++; continue; }
+
+          $name = trim((string)($row['name'] ?? '')) ?: ('Voucher ' . $profile);
+
+          $durMin = (int)($row['duration_minutes'] ?? 60);
+          if ($durMin < 1) $durMin = 1;
+
+          $active = (int)($row['is_active'] ?? 1) ? true : false;
+
+          $priceStr = trim((string)($row['price'] ?? ''));
+          $hasPrice = (bool)preg_match('/\d/', $priceStr);
+          $price    = $hasPrice ? $this->parseNominal($priceStr) : null;
+
+          // Cari existing berdasarkan (client_id, profile, name)
+          $model = HotspotVoucher::where('client_id', $clientId)
+            ->where('profile', $profile)
+            ->where('name', $name)
+            ->first();
+
+          if ($model) {
+            $payload = [
+              'duration_minutes' => $durMin,
+              'is_active'        => $active,
+            ];
+            if ($hasPrice) $payload['price'] = $price; // hanya update harga kalau diisi
+            $model->update($payload);
+            $updated++;
+          } else {
+            HotspotVoucher::create([
+              'client_id'        => $clientId,
+              'name'             => $name,
+              'price'            => $price ?? 0,
+              'duration_minutes' => $durMin,
+              'profile'          => $profile,
+              'code'             => null,
+              'is_active'        => $active,
+            ]);
+            $new++;
+          }
+        }
+      });
+
+      return response()->json([
+        'ok'      => true,
+        'message' => "Import selesai: {$new} baru, {$updated} update, {$skipped} dilewati."
+      ]);
+    } catch (\Throwable $e) {
+      // biar ke UI muncul pesan jelas, bukan "Server Error"
+      return response()->json([
+        'ok' => false,
+        'message' => 'Import gagal: ' . $e->getMessage()
+      ], 500);
+    }
   }
 
   private function parseNominal(string $s): int
