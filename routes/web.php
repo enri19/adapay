@@ -66,7 +66,7 @@ Route::prefix('admin')->as('admin.')->middleware(['auth'])->group(function () {
       Route::get('/{client}/edit',   [AdminClientController::class, 'edit'])->name('edit');
       Route::put('/{client}',        [AdminClientController::class, 'update'])->name('update');
       Route::delete('/{client}',     [AdminClientController::class, 'destroy'])->name('destroy');
-      Route::post('/{client}/router/import-vouchers', [AdminClientsController::class, 'importVouchers'])->name('router.import-vouchers');
+      Route::post('/{client:client_id}/router/import-vouchers', [AdminClientsController::class, 'importVouchers'])->name('router.import-vouchers');
 
       // Halaman alat router/hotspot
       Route::get('/{client}/tools',  [AdminClientController::class, 'tools'])->name('tools');
