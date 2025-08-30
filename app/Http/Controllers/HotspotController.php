@@ -7,6 +7,7 @@ use App\Models\HotspotUser;
 use App\Payments\Payment as PaymentResolver;
 use App\Services\HotspotProvisioner;
 use App\Support\OrderId;
+use App\Jobs\SendWhatsAppMessage;
 use Illuminate\Validation\Rule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -141,25 +142,46 @@ class HotspotController extends Controller
   private function waSendInvoice(array $data, string $orderId, $voucher, array $resp): void
   {
     try {
-      if (empty($data['phone'])) {
-        return;
-      }
+      if (empty($data['phone'])) return;
+
       $to       = \App\Support\Phone::normalizePhone($data['phone']);
       $orderUrl = url("/hotspot/order/{$orderId}");
       $payUrl   = $this->extractPayActionUrl($resp) ?? $orderUrl;
 
       $msg = $this->buildWaInvoiceMessage([
-        'order_id' => $orderId,
-        'voucher'  => $voucher->name ?? ("Voucher #{$voucher->id}"),
-        'amount'   => (int) $voucher->price,
-        'method'   => strtoupper($data['method'] ?? 'QRIS'),
-        'status'   => $resp['status'] ?? 'PENDING',
-        'pay_url'  => $payUrl,
-        'order_url'=> $orderUrl,
+        'order_id'  => $orderId,
+        'voucher'   => $voucher->name ?? ("Voucher #{$voucher->id}"),
+        'amount'    => (int) $voucher->price,
+        'method'    => strtoupper($data['method'] ?? 'QRIS'),
+        'status'    => $resp['status'] ?? 'PENDING',
+        'pay_url'   => $payUrl,
+        'order_url' => $orderUrl,
       ]);
 
+      // 1) Coba kirim via QUEUE (benar-benar async)
+      $conn = config('queue.default', 'sync');
+      try {
+        if ($conn !== 'sync') {
+          SendWhatsAppMessage::dispatch($to, $msg, $orderId)->onQueue('wa');
+          Log::info('wa.queue.dispatched', compact('orderId','to','conn'));
+          return; // non-blocking
+        }
+      } catch (\Throwable $e) {
+        Log::warning('wa.queue.dispatch_failed', ['order_id'=>$orderId,'err'=>$e->getMessage()]);
+      }
+
+      // 2) Fallback: jalankan setelah response dikirim (tidak butuh worker)
+      try {
+        SendWhatsAppMessage::dispatchAfterResponse($to, $msg, $orderId);
+        Log::info('wa.after_response.dispatched', compact('orderId','to'));
+        return; // non-blocking untuk user
+      } catch (\Throwable $e) {
+        Log::warning('wa.after_response.failed', ['order_id'=>$orderId,'err'=>$e->getMessage()]);
+      }
+
+      // 3) Fallback terakhir: kirim sinkron (supaya tidak hilang sama sekali)
       app(\App\Services\WhatsAppGateway::class)->send($to, $msg);
-      \Log::info('hotspot.invoice.whatsapp', compact('orderId', 'to'));
+      Log::info('wa.sync.sent', compact('orderId','to'));
     } catch (\Throwable $e) {
       \Log::warning('hotspot.invoice.whatsapp_failed', ['order_id' => $orderId, 'err' => $e->getMessage()]);
     }

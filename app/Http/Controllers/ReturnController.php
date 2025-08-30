@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Payment;
 use App\Services\HotspotProvisioner;
+use App\Jobs\SendWhatsAppMessage;
+use App\Services\WhatsAppGateway;
+use Illuminate\Support\Facades\Log;
 
 class ReturnController extends Controller
 {
@@ -45,8 +48,28 @@ class ReturnController extends Controller
           )
         : $this->buildWaPaidSimpleMessage($orderId);
 
-      app(\App\Services\WhatsAppGateway::class)->send($to, $msg);
-      \Log::info('paid.whatsapp', compact('orderId', 'to', 'authMode'));
+      // === ASYNC ===
+      $conn = config('queue.default', 'sync');
+
+      // 1) Pakai worker queue kalau ada (benar-benar non-blocking)
+      if ($conn !== 'sync') {
+        SendWhatsAppMessage::dispatch($to, $msg, $orderId)->onQueue('wa');
+        Log::info('wa.paid.queue.dispatched', compact('orderId','to','conn'));
+        return;
+      }
+
+      // 2) Fallback: kirim setelah response (tak butuh worker)
+      try {
+        SendWhatsAppMessage::dispatchAfterResponse($to, $msg, $orderId);
+        Log::info('wa.paid.after_response.dispatched', compact('orderId','to'));
+        return;
+      } catch (\Throwable $e) {
+        Log::warning('wa.paid.after_response.failed', ['order_id'=>$orderId, 'err'=>$e->getMessage()]);
+      }
+
+      // 3) Fallback terakhir: sinkron (biar nggak hilang sama sekali)
+      app(WhatsAppGateway::class)->send($to, $msg);
+      Log::info('wa.paid.sync.sent', compact('orderId','to'));
     } catch (\Throwable $e) {
       \Log::warning('paid.whatsapp_failed', ['order_id' => $orderId, 'err' => $e->getMessage()]);
     }
