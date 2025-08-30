@@ -103,6 +103,72 @@ class AdminClientController extends Controller
     return view('admin.clients.tools', compact('client','profiles','servers','online'));
   }
 
+  public function importVouchers(Request $r, Client $client)
+  {
+    // Otorisasi dasar: admin boleh semua, non-admin hanya client miliknya
+    $user = $r->user();
+    $isAdmin = $this->userIsAdmin($user);
+    if (!$isAdmin && $this->requireUserClientId($user) !== strtoupper($client->client_id)) {
+      return response()->json(['ok'=>false, 'message'=>'Tidak diizinkan untuk client ini.'], 403);
+    }
+
+    $items = (array) $r->input('items', []);
+    if (empty($items)) {
+      return response()->json(['ok'=>false, 'message'=>'Tidak ada item yang dipilih.'], 422);
+    }
+
+    $new = 0; $updated = 0; $skipped = 0;
+
+    foreach ($items as $profile => $row) {
+      // hanya yang dicentang
+      $enabled = (string)($row['enabled'] ?? '') !== '' && (int)$row['enabled'] === 1;
+      if (!$enabled) { $skipped++; continue; }
+
+      $name   = trim((string)($row['name'] ?? '')) ?: ('Voucher ' . $profile);
+      $price  = $this->parseNominal((string)($row['price'] ?? '0'));
+      $durMin = max(1, (int)($row['duration_minutes'] ?? 60));
+      $active = (int)($row['is_active'] ?? 1) ? true : false;
+
+      // upsert berdasarkan (client_id, profile, name)
+      $exists = HotspotVoucher::where('client_id', strtoupper($client->client_id))
+        ->where('profile', $profile)
+        ->where('name', $name)
+        ->first();
+
+      if ($exists) {
+        $exists->update([
+          'price' => $price,
+          'duration_minutes' => $durMin,
+          'is_active' => $active,
+        ]);
+        $updated++;
+      } else {
+        HotspotVoucher::create([
+          'client_id'        => strtoupper($client->client_id),
+          'name'             => $name,
+          'price'            => $price,
+          'duration_minutes' => $durMin,
+          'profile'          => $profile,
+          'code'             => null,
+          'is_active'        => $active,
+        ]);
+        $new++;
+      }
+    }
+
+    return response()->json([
+      'ok' => true,
+      'message' => "Import selesai: {$new} baru, {$updated} update, {$skipped} dilewati."
+    ]);
+  }
+
+  private function parseNominal(string $s): int
+  {
+    // "10.000", "10,000", "Rp 10.000" → 10000
+    $n = preg_replace('/[^\d]/', '', $s) ?: '0';
+    return (int) $n;
+  }
+
   /**
    * Test koneksi router
    */
