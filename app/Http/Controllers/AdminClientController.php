@@ -104,105 +104,68 @@ class AdminClientController extends Controller
     return view('admin.clients.tools', compact('client','profiles','servers','online'));
   }
 
-  public function importVouchers(Request $r, \App\Models\Client $client)
+  public function importVouchers(Request $r, Client $client)
   {
-    // ====== HARD GUARD ======
     try {
-      $user = $r->user();
-      $isAdmin = $this->userIsAdmin($user);
+      $items = $r->input('items', []);
+      if (!is_array($items) || empty($items)) {
+        return response()->json(['ok'=>false, 'message'=>'Tidak ada item yang dipilih.'], 422);
+      }
+
+      $clientId = strtoupper((string) $client->client_id);
+      $new = 0; $updated = 0; $skipped = 0; $failed = [];
+
+      foreach ($items as $k => $row) {
+        try {
+          $row = is_array($row) ? $row : [];
+          $enabled = (int)($row['enabled'] ?? 0) === 1;
+          if (!$enabled) { $skipped++; continue; }
+
+          $profile = trim((string)($row['profile'] ?? $k));
+          if ($profile === '') { $skipped++; continue; }
+
+          $name   = trim((string)($row['name'] ?? '')) ?: ('Voucher ' . $profile);
+          $durMin = max(1, (int)($row['duration_minutes'] ?? 60));
+          $active = (int)($row['is_active'] ?? 1) ? 1 : 0;
+
+          $priceStr = trim((string)($row['price'] ?? ''));
+          $hasPrice = (bool)preg_match('/\d/', $priceStr);
+          $priceVal = $hasPrice ? (int)preg_replace('/[^\d]/','', $priceStr) : null;
+
+          $model = HotspotVoucher::where('client_id', $clientId)
+            ->where('profile', $profile)
+            ->where('name', $name)
+            ->first();
+
+          if ($model) {
+            $payload = ['duration_minutes'=>$durMin, 'is_active'=>(bool)$active];
+            if ($hasPrice) $payload['price'] = $priceVal; // harga kosong → jangan ubah
+            $model->update($payload);
+            $updated++;
+          } else {
+            $payload = [
+              'client_id'        => $clientId,
+              'name'             => $name,
+              'price'            => $priceVal ?? 0,  // create baru: kosong → 0
+              'duration_minutes' => $durMin,
+              'profile'          => $profile,
+              'is_active'        => (bool)$active,
+            ];
+            HotspotVoucher::create($payload);
+            $new++;
+          }
+        } catch (\Throwable $e) {
+          $failed[] = ['profile' => $row['profile'] ?? (string)$k, 'error' => $e->getMessage()];
+        }
+      }
+
+      $msg = "Import: {$new} baru, {$updated} update, {$skipped} dilewati";
+      if ($failed) $msg .= ', '.count($failed).' gagal';
+
+      return response()->json(['ok'=>empty($failed), 'message'=>$msg, 'failed'=>$failed], $failed ? 207 : 200);
     } catch (\Throwable $e) {
-      return response()->json(['ok'=>false,'message'=>'Auth context error: '.$e->getMessage()], 500);
+      return response()->json(['ok'=>false, 'message'=>'Import gagal: '.$e->getMessage()], 500);
     }
-
-    if (!$isAdmin) {
-      try {
-        $must = strtoupper($this->requireUserClientId($user));
-        if ($must !== strtoupper($client->client_id)) {
-          return response()->json(['ok'=>false, 'message'=>'Tidak diizinkan untuk client ini.'], 403);
-        }
-      } catch (\Throwable $e) {
-        return response()->json(['ok'=>false,'message'=>'Auth error: '.$e->getMessage()], 403);
-      }
-    }
-
-    // Ambil payload
-    $items = $r->input('items', []);
-    if (!is_array($items) || empty($items)) {
-      return response()->json(['ok'=>false, 'message'=>'Tidak ada item yang dipilih.'], 422);
-    }
-
-    $clientId = strtoupper((string) $client->client_id);
-
-    $new = 0; $updated = 0; $skipped = 0; $failed = [];
-
-    foreach ($items as $k => $row) {
-      try {
-        // Pastikan bentuk row array
-        if (!is_array($row)) $row = [];
-
-        $enabled = (int)($row['enabled'] ?? 0) === 1;
-        // Ambil profile dari hidden field (fallback ke key)
-        $profile = trim((string)($row['profile'] ?? $k));
-
-        if (!$enabled || $profile === '') { $skipped++; continue; }
-
-        $name   = trim((string)($row['name'] ?? '')) ?: ('Voucher ' . $profile);
-        $durMin = (int)($row['duration_minutes'] ?? 60);
-        if ($durMin < 1) $durMin = 1;
-
-        $active = (int)($row['is_active'] ?? 1) ? 1 : 0;
-
-        // Harga: boleh kosong (create -> 0, update -> tidak diubah)
-        $priceStr = trim((string)($row['price'] ?? ''));
-        $hasPrice = (bool)preg_match('/\d/', $priceStr);
-        $priceVal = $hasPrice ? (int)preg_replace('/[^\d]/','', $priceStr) : null;
-
-        // Cari existing per (client_id, profile, name)
-        $model = \App\Models\HotspotVoucher::where('client_id', $clientId)
-          ->where('profile', $profile)
-          ->where('name', $name)
-          ->first();
-
-        if ($model) {
-          $payload = [
-            'duration_minutes' => $durMin,
-            'is_active'        => (bool)$active,
-          ];
-          if ($hasPrice) $payload['price'] = $priceVal;
-          // code jangan disentuh kalau sudah ada
-          $model->update($payload);
-          $updated++;
-        } else {
-          // Pastikan kolom yang mungkin NOT NULL tidak dikasih null
-          $payload = [
-            'client_id'        => $clientId,
-            'name'             => $name,
-            'price'            => $priceVal ?? 0,
-            'duration_minutes' => $durMin,
-            'profile'          => $profile,
-            'is_active'        => (bool)$active,
-          ];
-          // Kalau kolom `code` NOT NULL di DB kamu, jangan set null:
-          // $payload['code'] = '';
-          \App\Models\HotspotVoucher::create($payload);
-          $new++;
-        }
-      } catch (\Throwable $e) {
-        $failed[] = [
-          'profile' => $row['profile'] ?? (string)$k,
-          'error'   => $e->getMessage(),
-        ];
-      }
-    }
-
-    $msg = "Import: {$new} baru, {$updated} update, {$skipped} dilewati";
-    if (!empty($failed)) $msg .= ", ".count($failed)." gagal";
-
-    return response()->json([
-      'ok'      => empty($failed),
-      'message' => $msg,
-      'failed'  => $failed, // untuk debug cepat di Network tab
-    ], empty($failed) ? 200 : 207); // 207 Multi-Status utk indikasi mixed
   }
 
   private function parseNominal(string $s): int
