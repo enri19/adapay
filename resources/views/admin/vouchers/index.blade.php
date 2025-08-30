@@ -29,7 +29,7 @@
           <div class="control"><input class="input" type="search" name="q" value="{{ $q }}" placeholder="Cari nama/kode/profil"></div>
           <button class="btn">Filter</button>
         </form>
-        <a href="{{ route('admin.vouchers.create') }}" class="btn btn--primary">Tambah</a>
+        <a href="{{ route('admin.vouchers.create', ['client_id' => $client]) }}" class="btn btn--primary">Tambah</a>
       </div>
     </div>
   </div>

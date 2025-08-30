@@ -6,7 +6,7 @@
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <h1 style="margin:0;font-size:1.25rem">{{ $voucher->exists ? 'Edit' : 'Tambah' }} Voucher</h1>
-      <a href="{{ route('admin.vouchers.index') }}" class="btn btn--ghost">← Kembali</a>
+      <a href="{{ route('admin.vouchers.index', ['client_id' => $clientId ?? null]) }}" class="btn btn--ghost">← Kembali</a>
     </div>
 
     @if ($errors->any())
@@ -21,13 +21,19 @@
     <form method="POST" action="{{ $voucher->exists ? route('admin.vouchers.update',$voucher) : route('admin.vouchers.store') }}" class="form">
       @csrf @if($voucher->exists) @method('PUT') @endif
 
+      @php
+        $routeReload = $voucher->exists ? route('admin.vouchers.edit',$voucher) : route('admin.vouchers.create');
+        $selClientId = old('client_id', $clientId ?? ($voucher->client_id ?: 'DEFAULT'));
+      @endphp
+
       <div class="form-grid form-2">
         <div>
           <label class="label">Client</label>
           <div class="control">
-            <select name="client_id" class="select" required>
+            <select name="client_id" class="select" required
+              onchange="(function(s){var u=new URL('{{ $routeReload }}',window.location);u.searchParams.set('client_id',s.value);window.location=u.toString();})(this)">
               @foreach($clients as $c)
-                <option value="{{ $c->client_id }}" {{ old('client_id',$voucher->client_id ?: 'DEFAULT')===$c->client_id?'selected':'' }}>
+                <option value="{{ $c->client_id }}" {{ $selClientId===$c->client_id?'selected':'' }}>
                   {{ $c->client_id }} — {{ $c->name }}
                 </option>
               @endforeach
@@ -53,8 +59,31 @@
         </div>
 
         <div>
-          <label class="label">Profile Mikrotik</label>
-          <div class="control"><input class="input" name="profile" value="{{ old('profile',$voucher->profile ?: 'default') }}" required></div>
+          <label class="label">
+            Profile Mikrotik
+            @if(!empty($profiles))
+              <span class="pill pill--ok" style="margin-left:.25rem">auto-load</span>
+            @elseif(isset($online) && !$online)
+              <span class="pill pill--off" style="margin-left:.25rem">offline</span>
+            @endif
+          </label>
+
+          @if(!empty($profiles))
+            <div class="control">
+              <select class="select" name="profile" required>
+                @php $cur = old('profile', $voucher->profile ?: 'default'); @endphp
+                @foreach($profiles as $p)
+                  <option value="{{ $p }}" {{ $cur===$p ? 'selected' : '' }}>{{ $p }}</option>
+                @endforeach
+              </select>
+            </div>
+            <div class="help">
+              {{ $online ? 'Profil dimuat dari Mikrotik (' . ($servers ? implode(', ', (array)$servers) : 'server tidak terdeteksi') . ')' : 'Tidak terhubung ke Mikrotik' }}.
+            </div>
+          @else
+            <div class="control"><input class="input" name="profile" value="{{ old('profile',$voucher->profile ?: 'default') }}" required></div>
+            <div class="help">Gagal memuat dari Mikrotik, isi manual.</div>
+          @endif
         </div>
 
         <div>
@@ -78,7 +107,7 @@
           <span class="btn__label">Simpan</span>
           <span class="spinner hidden" aria-hidden="true"></span>
         </button>
-        <a href="{{ route('admin.vouchers.index') }}" class="btn btn--ghost">Batal</a>
+        <a href="{{ route('admin.vouchers.index', ['client_id' => $selClientId]) }}" class="btn btn--ghost">Batal</a>
       </div>
     </form>
   </div>

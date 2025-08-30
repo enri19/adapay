@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\HotspotVoucher;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Concerns\ResolvesRoleAndClient;
+use App\Services\Mikrotik\MikrotikClient;
 
 class AdminVoucherController extends Controller
 {
@@ -37,7 +38,7 @@ class AdminVoucherController extends Controller
     return view('admin.vouchers.index', compact('rows','clients','client','q'));
   }
 
-  public function create(Request $r)
+  public function create(Request $r, MikrotikClient $mt) // <— INJECT $mt
   {
     $user = $r->user();
     $isAdmin = $this->userIsAdmin($user);
@@ -45,10 +46,40 @@ class AdminVoucherController extends Controller
     $voucher = new HotspotVoucher(['duration_minutes'=>60,'profile'=>'default','is_active'=>true]);
 
     $clientsQuery = Client::query()->orderBy('client_id');
-    if (!$isAdmin) $clientsQuery->where('client_id', $this->requireUserClientId($user));
+    $clientId = strtoupper((string) $r->query('client_id',''));
+    if (!$isAdmin) {
+      $clientId = $this->requireUserClientId($user);
+      $clientsQuery->where('client_id', $clientId);
+    }
     $clients = $clientsQuery->get();
 
-    return view('admin.vouchers.form', compact('voucher','clients'));
+    // — Auto-load Mikrotik profiles/servers (best effort)
+    $profiles = [];
+    $servers  = [];
+    $online   = false;
+
+    if ($clientId !== '') {
+      $selected = Client::where('client_id', $clientId)->first();
+      if ($selected) {
+        try {
+          $m = $this->mtFor($mt, $selected);
+          if (method_exists($m,'ping')) $m->ping(); else $m->raw('/system/identity/print');
+          $online = true;
+
+          try {
+            $profiles = method_exists($m,'listHotspotProfiles')
+              ? (array) $m->listHotspotProfiles()
+              : collect($m->raw('/ip/hotspot/user/profile/print'))->pluck('name')->filter()->values()->all();
+
+            $servers = method_exists($m,'listHotspotServers')
+              ? (array) $m->listHotspotServers()
+              : collect($m->raw('/ip/hotspot/print'))->pluck('name')->filter()->values()->all();
+          } catch (\Throwable $e) { /* ignore */ }
+        } catch (\Throwable $e) { /* offline */ }
+      }
+    }
+
+    return view('admin.vouchers.form', compact('voucher','clients','profiles','servers','online','clientId'));
   }
 
   public function store(Request $r)
@@ -65,17 +96,71 @@ class AdminVoucherController extends Controller
     return redirect()->route('admin.vouchers.index')->with('ok','Voucher dibuat.');
   }
 
-  public function edit(Request $r, HotspotVoucher $voucher)
+  public function edit(Request $r, HotspotVoucher $voucher, MikrotikClient $mt) // <— NEW
   {
     $user = $r->user();
-    if (!$this->userIsAdmin($user) && strtoupper((string)$voucher->client_id) !== $this->requireUserClientId($user)) {
-      abort(403, 'Forbidden');
-    }
+    $isAdmin = $this->userIsAdmin($user);
+
+    // list client yang boleh dipilih
     $clientsQuery = Client::query()->orderBy('client_id');
-    if (!$this->userIsAdmin($user)) $clientsQuery->where('client_id', $this->requireUserClientId($user));
+    if (!$isAdmin) $clientsQuery->where('client_id', $this->requireUserClientId($user));
     $clients = $clientsQuery->get();
 
-    return view('admin.vouchers.form', compact('voucher','clients'));
+    // client yang aktif di dropdown (boleh override via ?client_id=)
+    $clientId = strtoupper((string) ($r->query('client_id', $voucher->client_id ?: '')));
+
+    // — Auto-load Mikrotik profiles/servers (best effort)
+    $profiles = [];
+    $servers  = [];
+    $online   = false;
+
+    if ($clientId !== '') {
+      $selected = Client::where('client_id', $clientId)->first();
+      if ($selected) {
+        try {
+          $m = $this->mtFor($mt, $selected);
+          if (method_exists($m,'ping')) $m->ping(); else $m->raw('/system/identity/print');
+          $online = true;
+
+          try {
+            $profiles = method_exists($m,'listHotspotProfiles')
+              ? (array) $m->listHotspotProfiles()
+              : collect($m->raw('/ip/hotspot/user/profile/print'))->pluck('name')->filter()->values()->all();
+
+            $servers = method_exists($m,'listHotspotServers')
+              ? (array) $m->listHotspotServers()
+              : collect($m->raw('/ip/hotspot/print'))->pluck('name')->filter()->values()->all();
+          } catch (\Throwable $e) { /* ignore */ }
+        } catch (\Throwable $e) { /* offline */ }
+      }
+    }
+
+    return view('admin.vouchers.form', compact('voucher','clients','profiles','servers','online','clientId'));
+  }
+
+  // — Helper koneksi Mikrotik (copas dari controller sebelumnya)
+  private function mtFor(MikrotikClient $mt, Client $client): MikrotikClient
+  {
+    $router = [
+      'host' => (string) $client->router_host,
+      'port' => (int)   ($client->router_port ?: 8728),
+      'user' => (string) $client->router_user,
+      'pass' => (string) $client->router_pass,
+    ];
+
+    if ($router['host'] === '' || $router['user'] === '' || $router['pass'] === '') {
+      throw new \RuntimeException('Konfigurasi router belum lengkap (host/user/pass).');
+    }
+
+    if (method_exists($mt, 'withConfig')) {
+      $new = $mt->withConfig($router);
+      return ($new instanceof MikrotikClient) ? $new : $mt;
+    }
+    if (method_exists($mt, 'connect')) {
+      $mt->connect($router['host'], $router['port'], $router['user'], $router['pass']);
+      return $mt;
+    }
+    return $mt;
   }
 
   public function update(Request $r, HotspotVoucher $voucher)
