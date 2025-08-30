@@ -37,16 +37,33 @@
     .tool-card .form-grid.form-2{ grid-template-columns:1fr; }
   }
 
-  /* List profil di kartu import */
+  /* Import Voucher list */
   .profile-list{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
-  @media (max-width: 780px){ .profile-list{ grid-template-columns:1fr; } }
+  @media (max-width:780px){ .profile-list{ grid-template-columns:1fr; } }
+
   .profile-item{
     border:1px solid #E5E7EB; border-radius:.5rem; padding:.6rem .7rem;
-    display:grid; grid-template-columns: 24px 1fr; gap:.6rem; align-items:start;
+    display:grid; grid-template-columns:36px 1fr; gap:.6rem; align-items:start;
   }
-  .profile-item .row{ display:grid; grid-template-columns: 1fr 1fr; gap:.5rem; margin-top:.4rem; }
-  @media (max-width: 780px){ .profile-item .row{ grid-template-columns:1fr; } }
-  .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+  .check-wrap{
+    display:flex; align-items:center; justify-content:center;
+    height:100%; padding:6px 0;
+  }
+
+  .profile-item input[type="checkbox"]{
+    width:18px; height:18px; margin:0;
+  }
+
+  .title-row{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:.5rem; flex-wrap:wrap; cursor:pointer;
+  }
+
+  .profile-item .row{
+    display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-top:.4rem;
+  }
+  @media (max-width:780px){ .profile-item .row{ grid-template-columns:1fr; } }
 </style>
 @endpush
 
@@ -231,50 +248,55 @@
 
           <div class="profile-list">
             @foreach($profiles as $p)
-            <div class="profile-item">
-              <div class="control" style="padding-top:.2rem">
-                <input type="checkbox" name="items[{{ $p }}][enabled]" value="1" checked>
-              </div>
-              <div>
-                <div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap">
-                  <div class="mono">Profile: <strong>{{ $p }}</strong></div>
-                  <div class="help">Server: {{ !empty($servers) ? implode(', ', (array)$servers) : '—' }}</div>
+              @php $pid = 'chk-'.preg_replace('/[^a-z0-9]+/i','-', $p); @endphp
+              <div class="profile-item">
+                <div class="check-wrap">
+                  <input id="{{ $pid }}" type="checkbox" name="items[{{ $p }}][enabled]" value="1" checked>
                 </div>
+                <div>
+                  <label class="title-row" for="{{ $pid }}">
+                    <div class="mono">Profile: <strong>{{ $p }}</strong></div>
+                    <div class="help">Server: {{ !empty($servers) ? implode(', ', (array)$servers) : '—' }}</div>
+                  </label>
 
-                <div class="row">
-                  <div>
-                    <label class="label">Nama Voucher</label>
-                    <div class="control">
-                      <input class="input" name="items[{{ $p }}][name]" value="Voucher {{ $p }}">
+                  <div class="row">
+                    <div>
+                      <label class="label">Nama Voucher</label>
+                      <div class="control">
+                        <input class="input" name="items[{{ $p }}][name]" value="Voucher {{ $p }}">
+                      </div>
+                    </div>
+
+                    <div>
+                      <label class="label">Harga (Rp)</label>
+                      <div class="control">
+                        {{-- biarkan KOSONG secara default --}}
+                        <input class="input" name="items[{{ $p }}][price]" placeholder="contoh: 10.000">
+                      </div>
+                      <div class="help">Kosongkan untuk mempertahankan harga saat update.</div>
+                    </div>
+
+                    <div>
+                      <label class="label">Durasi (menit)</label>
+                      <div class="control">
+                        <input class="input" type="number" min="1" name="items[{{ $p }}][duration_minutes]" value="60">
+                      </div>
+                    </div>
+
+                    <div>
+                      <label class="label">Aktif</label>
+                      <div class="control">
+                        <select class="select" name="items[{{ $p }}][is_active]">
+                          <option value="1" selected>Ya</option>
+                          <option value="0">Tidak</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <label class="label">Harga (Rp)</label>
-                    <div class="control">
-                      <input class="input" name="items[{{ $p }}][price]" placeholder="contoh: 10.000">
-                    </div>
-                  </div>
-                  <div>
-                    <label class="label">Durasi (menit)</label>
-                    <div class="control">
-                      <input class="input" type="number" min="1" name="items[{{ $p }}][duration_minutes]" value="60">
-                    </div>
-                  </div>
-                  <div>
-                    <label class="label">Aktif</label>
-                    <div class="control">
-                      <select class="select" name="items[{{ $p }}][is_active]">
-                        <option value="1" selected>Ya</option>
-                        <option value="0">Tidak</option>
-                      </select>
-                    </div>
-                  </div>
+
+                  <input type="hidden" name="items[{{ $p }}][profile]" value="{{ $p }}">
                 </div>
-
-                {{-- simpan profile sebagai referensi --}}
-                <input type="hidden" name="items[{{ $p }}][profile]" value="{{ $p }}">
               </div>
-            </div>
             @endforeach
           </div>
 

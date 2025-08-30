@@ -125,28 +125,28 @@ class AdminClientController extends Controller
       if (!$enabled) { $skipped++; continue; }
 
       $name   = trim((string)($row['name'] ?? '')) ?: ('Voucher ' . $profile);
-      $price  = $this->parseNominal((string)($row['price'] ?? '0'));
-      $durMin = max(1, (int)($row['duration_minutes'] ?? 60));
-      $active = (int)($row['is_active'] ?? 1) ? true : false;
+      $priceStr  = trim((string)($row['price'] ?? ''));
+      $hasPrice  = (bool) preg_match('/\d/', $priceStr); // ada digit?
+      $price     = $hasPrice ? $this->parseNominal($priceStr) : null;
 
-      // upsert berdasarkan (client_id, profile, name)
       $exists = HotspotVoucher::where('client_id', strtoupper($client->client_id))
         ->where('profile', $profile)
         ->where('name', $name)
         ->first();
 
       if ($exists) {
-        $exists->update([
-          'price' => $price,
+        $payload = [
           'duration_minutes' => $durMin,
-          'is_active' => $active,
-        ]);
+          'is_active'        => $active,
+        ];
+        if ($hasPrice) $payload['price'] = $price;   // hanya update harga kalau diisi
+        $exists->update($payload);
         $updated++;
       } else {
         HotspotVoucher::create([
           'client_id'        => strtoupper($client->client_id),
           'name'             => $name,
-          'price'            => $price,
+          'price'            => $price ?? 0,         // baru: kosong → 0
           'duration_minutes' => $durMin,
           'profile'          => $profile,
           'code'             => null,
