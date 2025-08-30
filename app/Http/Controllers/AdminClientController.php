@@ -109,6 +109,8 @@ class AdminClientController extends Controller
     try {
       $user = $r->user();
       $isAdmin = $this->userIsAdmin($user);
+
+      // kunci akses
       if (!$isAdmin && $this->requireUserClientId($user) !== strtoupper($client->client_id)) {
         return response()->json(['ok'=>false, 'message'=>'Tidak diizinkan untuk client ini.'], 403);
       }
@@ -121,7 +123,7 @@ class AdminClientController extends Controller
       $clientId = strtoupper($client->client_id);
       $new = 0; $updated = 0; $skipped = 0;
 
-      DB::transaction(function() use ($items, $clientId, &$new, &$updated, &$skipped) {
+      \DB::transaction(function() use ($items, $clientId, &$new, &$updated, &$skipped) {
         foreach ($items as $k => $row) {
           $enabled = (int)($row['enabled'] ?? 0) === 1;
           if (!$enabled) { $skipped++; continue; }
@@ -130,18 +132,14 @@ class AdminClientController extends Controller
           if ($profile === '') { $skipped++; continue; }
 
           $name = trim((string)($row['name'] ?? '')) ?: ('Voucher ' . $profile);
-
-          $durMin = (int)($row['duration_minutes'] ?? 60);
-          if ($durMin < 1) $durMin = 1;
-
+          $durMin = max(1, (int)($row['duration_minutes'] ?? 60));
           $active = (int)($row['is_active'] ?? 1) ? true : false;
 
           $priceStr = trim((string)($row['price'] ?? ''));
           $hasPrice = (bool)preg_match('/\d/', $priceStr);
           $price    = $hasPrice ? $this->parseNominal($priceStr) : null;
 
-          // Cari existing berdasarkan (client_id, profile, name)
-          $model = HotspotVoucher::where('client_id', $clientId)
+          $model = \App\Models\HotspotVoucher::where('client_id', $clientId)
             ->where('profile', $profile)
             ->where('name', $name)
             ->first();
@@ -151,14 +149,14 @@ class AdminClientController extends Controller
               'duration_minutes' => $durMin,
               'is_active'        => $active,
             ];
-            if ($hasPrice) $payload['price'] = $price; // hanya update harga kalau diisi
+            if ($hasPrice) $payload['price'] = $price; // harga kosong → jangan ubah
             $model->update($payload);
             $updated++;
           } else {
-            HotspotVoucher::create([
+            \App\Models\HotspotVoucher::create([
               'client_id'        => $clientId,
               'name'             => $name,
-              'price'            => $price ?? 0,
+              'price'            => $price ?? 0,      // create baru: kosong → 0
               'duration_minutes' => $durMin,
               'profile'          => $profile,
               'code'             => null,
@@ -174,7 +172,6 @@ class AdminClientController extends Controller
         'message' => "Import selesai: {$new} baru, {$updated} update, {$skipped} dilewati."
       ]);
     } catch (\Throwable $e) {
-      // biar ke UI muncul pesan jelas, bukan "Server Error"
       return response()->json([
         'ok' => false,
         'message' => 'Import gagal: ' . $e->getMessage()
