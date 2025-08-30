@@ -27,19 +27,20 @@
       @endphp
 
       <div class="form-grid form-2">
+        @php
+          $selClientId = old('client_id', $clientId ?? ($voucher->client_id ?: 'DEFAULT'));
+          $selClient   = isset($clients) ? $clients->firstWhere('client_id', $selClientId) : null;
+        @endphp
+
         <div>
           <label class="label">Client</label>
           <div class="control">
-            <select name="client_id" class="select" required
-              onchange="(function(s){var u=new URL('{{ $routeReload }}',window.location);u.searchParams.set('client_id',s.value);window.location=u.toString();})(this)">
-              @foreach($clients as $c)
-                <option value="{{ $c->client_id }}" {{ $selClientId===$c->client_id?'selected':'' }}>
-                  {{ $c->client_id }} — {{ $c->name }}
-                </option>
-              @endforeach
-            </select>
+            <input class="input mono" name="client_id" value="{{ $selClientId }}" readonly>
           </div>
-          <div class="help">Gunakan <code>DEFAULT</code> untuk global (tampil di semua lokasi).</div>
+          <div class="help">
+            {{ $selClient ? ($selClient->client_id.' — '.$selClient->name) : 'DEFAULT (global)' }}.
+            Ubah client dari halaman daftar voucher (pilih client di dropdown kecil lalu klik <strong>Tambah</strong>).
+          </div>
         </div>
 
         <div>
