@@ -310,7 +310,6 @@
   </div>
 @endsection
 
-@push('scripts')
 <script>
 (function(){
   function flash(type, text){
@@ -322,7 +321,21 @@
     setTimeout(()=>{ box.remove(); }, 6000);
   }
 
-  function submitToolForm(form){
+  async function readJsonSafe(res){
+    try { return await res.json(); } catch(e){ return null; }
+  }
+
+  async function readTextSafe(res){
+    try { return await res.text(); } catch(e){ return ''; }
+  }
+
+  function csrfToken(form){
+    return form.querySelector('input[name="_token"]')?.value
+        || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+        || '';
+  }
+
+  async function submitToolForm(form){
     const card = form.closest('.tool-card');
     if (!card) return;
 
@@ -334,35 +347,39 @@
     const btns = form.querySelectorAll('button[type="submit"],input[type="submit"]');
     btns.forEach(b=>b.setAttribute('disabled','disabled'));
 
-    const fd = new FormData(form);
-    if (form.dataset.deep === '1') fd.set('deep','1');
+    try {
+      const fd = new FormData(form);
+      if (form.dataset.deep === '1') fd.set('deep','1');
 
-    const csrf = form.querySelector('input[name="_token"]')?.value || '';
+      const res = await fetch(form.action, {
+        method: form.method || 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRF-TOKEN': csrfToken(form),
+          'Accept': 'application/json'
+        },
+        body: fd,
+        credentials: 'same-origin'
+      });
 
-    fetch(form.action, {
-      method: form.method || 'POST',
-      headers: {
-        'X-Requested-With': 'XMLHttpRequest',
-        'X-CSRF-TOKEN': csrf,
-        'Accept': 'application/json'
-      },
-      body: fd,
-      credentials: 'same-origin'
-    })
-    .then(async res => {
-      let json = null;
-      try { json = await res.json(); } catch(e){}
-      const ok  = res.ok && json && json.ok !== false;
-      const msg = (json && json.message) ? json.message : (ok ? 'Berhasil.' : 'Terjadi kesalahan.');
-      flash(ok ? 'ok' : 'err', msg);
-    })
-    .catch(err => {
+      let json = await readJsonSafe(res);
+      if (res.ok && json && json.ok !== false) {
+        flash('ok', json.message || 'Berhasil.');
+      } else {
+        if (!json) {
+          const txt = await readTextSafe(res);
+          const msg = (txt && txt.length < 300) ? txt : ('Error ' + res.status);
+          flash('err', msg || 'Terjadi kesalahan.');
+        } else {
+          flash('err', json.message || 'Terjadi kesalahan.');
+        }
+      }
+    } catch (err) {
       flash('err', 'Gagal mengirim: ' + (err?.message || err));
-    })
-    .finally(() => {
+    } finally {
       card.classList.remove('is-loading');
       btns.forEach(b=>b.removeAttribute('disabled'));
-    });
+    }
   }
 
   document.addEventListener('DOMContentLoaded', function(){
@@ -374,7 +391,6 @@
     });
   });
 
-  // Helpers untuk kartu Import Voucher
   window.toolsSelectAll = function(state){
     document.querySelectorAll('.profile-item input[type="checkbox"][name$="[enabled]"]').forEach(cb => {
       cb.checked = !!state;
@@ -382,4 +398,3 @@
   };
 })();
 </script>
-@endpush
