@@ -8,6 +8,7 @@ use App\Models\Payment;
 use App\Models\Client;
 use App\Services\Mikrotik\MikrotikClient;
 use App\Support\OrderId;
+use App\Jobs\ProvisionHotspotUser;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
@@ -223,5 +224,46 @@ class HotspotProvisioner
               'err'       => $e->getMessage(),
           ]);
       }
+  }
+
+  public function queuePushToMikrotik(HotspotUser $u): void
+  {
+    // Ambil order + client string (BUENI/DEFAULT) → cari model Client untuk dapat PK numeric
+    $order    = \App\Models\HotspotOrder::where('order_id', $u->order_id)->first();
+    $clientId = $this->resolveClientId($u->order_id, $order); // string kode
+    $client   = Client::where('client_id', $clientId)->first();
+
+    if (!$client) { Log::warning('queuePush: client not found', compact('clientId')); return; }
+
+    // Router & policy push sama seperti pushToMikrotik() (ringkas)
+    $router = $this->resolveRouter($clientId);
+    if (!$router || empty($router['enable_push'])) { Log::info('queuePush: push disabled'); return; }
+    if (empty($router['host']) || empty($router['user']) || empty($router['pass'])) {
+      Log::warning('queuePush: router config incomplete', ['client_id'=>$clientId, 'router'=>$router]); return;
+    }
+
+    $limit = $u->duration_minutes ? ($u->duration_minutes . 'm') : null;
+
+    // --- Dispatch ke queue 'router' ---
+    $conn = config('queue.default', 'sync');
+    try {
+      if ($conn !== 'sync') {
+        ProvisionHotspotUser::dispatch(
+          $client->id, $u->username, $u->password, $u->profile, $limit
+        )->onQueue('router');
+        Log::info('router.queue.dispatched', ['order_id'=>$u->order_id, 'client_pk'=>$client->id, 'conn'=>$conn]);
+        return;
+      }
+
+      // Tanpa worker → jalanin setelah response (tetap non-blocking untuk user)
+      ProvisionHotspotUser::dispatchAfterResponse(
+        $client->id, $u->username, $u->password, $u->profile, $limit
+      )->onQueue('router');
+      Log::info('router.queue.after_response', ['order_id'=>$u->order_id]);
+    } catch (\Throwable $e) {
+      // Fallback terakhir: tetap dorong sinkron biar nggak hilang
+      Log::warning('router.queue.dispatch_failed_fallback_sync', ['order_id'=>$u->order_id, 'err'=>$e->getMessage()]);
+      $this->pushToMikrotik($u);
+    }
   }
 }

@@ -101,33 +101,6 @@ class PaymentController extends Controller
     );
   }
 
-  // public function refreshStatus(string $orderId)
-  // {
-  //   $adapter = PaymentResolver::provider();
-  //   $raw = $adapter->getStatus($orderId);
-
-  //   $rawStatus = strtolower($raw['transaction_status'] ?? 'pending');
-  //   $incoming  = app(\App\Payments\Providers\MidtransAdapter::class)->normalizeStatus($rawStatus);
-
-  //   $payment = Payment::where('order_id', $orderId)->first();
-  //   $merged  = Payment::mergeStatus($payment->status ?? null, $incoming);
-
-  //   $payment = Payment::updateOrCreate(
-  //     ['order_id' => $orderId],
-  //     [
-  //       'provider'     => 'midtrans',
-  //       'provider_ref' => $raw['transaction_id'] ?? null,
-  //       'amount'       => (int) ($raw['gross_amount'] ?? ($payment->amount ?? 0)),
-  //       'currency'     => 'IDR',
-  //       'status'       => $merged,
-  //       'raw'          => $raw,
-  //       'paid_at'      => in_array($rawStatus, ['capture','settlement','success'], true) ? now() : $payment->paid_at,
-  //     ]
-  //   );
-
-  //   return response()->json($payment);
-  // }
-
   public function createGopay(Request $request)
   {
     $data = $request->validate([

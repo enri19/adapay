@@ -108,9 +108,8 @@ class WebhookController extends Controller
             $p = Payment::where('order_id', $orderId)->first();
             if ($p && $p->status === 'PAID') {
                 try {
-                    $clientId = OrderId::client($orderId) ?: 'DEFAULT';
-                    $u = $prov->provision($orderId, $clientId);
-                    if ($u) $prov->pushToMikrotik($u);
+                    $u = $prov->provision($orderId);
+                    if ($u) $prov->queuePushToMikrotik($u);
                 } catch (\Throwable $e) {
                     Log::error('Provision after webhook gagal', ['order_id'=>$orderId, 'err'=>$e->getMessage()]);
                 }
