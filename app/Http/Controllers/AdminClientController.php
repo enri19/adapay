@@ -132,39 +132,75 @@ class AdminClientController extends Controller
           $hasPrice = (bool)preg_match('/\d/', $priceStr);
           $priceVal = $hasPrice ? (int)preg_replace('/[^\d]/','', $priceStr) : null;
 
+          // Upsert berdasarkan (client_id, profile, name)
           $model = HotspotVoucher::where('client_id', $clientId)
             ->where('profile', $profile)
             ->where('name', $name)
             ->first();
 
           if ($model) {
-            $payload = ['duration_minutes'=>$durMin, 'is_active'=>(bool)$active];
+            $payload = [
+              'duration_minutes' => $durMin,
+              'is_active'        => (bool)$active,
+            ];
             if ($hasPrice) $payload['price'] = $priceVal; // harga kosong → jangan ubah
             $model->update($payload);
             $updated++;
-          } else {
-            $payload = [
-              'client_id'        => $clientId,
-              'name'             => $name,
-              'price'            => $priceVal ?? 0,  // create baru: kosong → 0
-              'duration_minutes' => $durMin,
-              'profile'          => $profile,
-              'is_active'        => (bool)$active,
-            ];
+            continue;
+          }
+
+          // CREATE BARU — coba tanpa code dulu
+          $payload = [
+            'client_id'        => $clientId,
+            'name'             => $name,
+            'price'            => $priceVal ?? 0,
+            'duration_minutes' => $durMin,
+            'profile'          => $profile,
+            'is_active'        => (bool)$active,
+            // 'code' sengaja tidak diisi
+          ];
+
+          try {
             HotspotVoucher::create($payload);
             $new++;
+          } catch (\Throwable $e1) {
+            // Kalau fail (kemungkinan besar karena 'code' NOT NULL / UNIQUE), generate code unik lalu coba lagi
+            $fallbackCode = 'IMP-'.Str::upper($clientId).'-'.Str::slug($profile).'-'.Str::upper(Str::random(4));
+
+            $payloadWithCode = $payload + ['code' => $fallbackCode];
+            try {
+              HotspotVoucher::create($payloadWithCode);
+              $new++;
+            } catch (\Throwable $e2) {
+              $failed[] = [
+                'profile' => $profile,
+                'name'    => $name,
+                'error'   => $e2->getMessage(),
+              ];
+              Log::warning('Voucher import failed', ['client_id'=>$clientId, 'profile'=>$profile, 'name'=>$name, 'error'=>$e2->getMessage()]);
+            }
           }
         } catch (\Throwable $e) {
-          $failed[] = ['profile' => $row['profile'] ?? (string)$k, 'error' => $e->getMessage()];
+          $failed[] = [
+            'profile' => $row['profile'] ?? (string)$k,
+            'name'    => $row['name'] ?? ('Voucher '.$k),
+            'error'   => $e->getMessage(),
+          ];
+          Log::warning('Voucher import failed (outer)', ['client_id'=>$clientId, 'row'=>$row, 'error'=>$e->getMessage()]);
         }
       }
 
       $msg = "Import: {$new} baru, {$updated} update, {$skipped} dilewati";
       if ($failed) $msg .= ', '.count($failed).' gagal';
 
-      return response()->json(['ok'=>empty($failed), 'message'=>$msg, 'failed'=>$failed], $failed ? 207 : 200);
+      return response()->json([
+        'ok'      => empty($failed),
+        'message' => $msg,
+        'failed'  => $failed, // <— kirim detail biar bisa ditampilin di UI
+      ], $failed ? 207 : 200);
+
     } catch (\Throwable $e) {
-      return response()->json(['ok'=>false, 'message'=>'Import gagal: '.$e->getMessage()], 500);
+      return response()->json(['ok'=>false,'message'=>'Import gagal: '.$e->getMessage()], 500);
     }
   }
 
