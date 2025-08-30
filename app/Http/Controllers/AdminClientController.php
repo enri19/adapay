@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use Illuminate\Http\Request;
 use App\Services\Mikrotik\MikrotikClient;
+use App\Models\HotspotVoucher;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Http;
 
