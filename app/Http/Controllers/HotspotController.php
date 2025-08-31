@@ -144,6 +144,11 @@ class HotspotController extends Controller
     try {
       if (empty($data['phone'])) return;
 
+      if (!\Cache::add('wa:invoice:'.$orderId, 1, 600)) {
+        \Log::info('wa.invoice.skip.cache', compact('orderId'));
+        return;
+      }
+
       $to       = \App\Support\Phone::normalizePhone($data['phone']);
       $orderUrl = url("/hotspot/order/{$orderId}");
       $payUrl   = $this->extractPayActionUrl($resp) ?? $orderUrl;
@@ -158,30 +163,39 @@ class HotspotController extends Controller
         'order_url' => $orderUrl,
       ]);
 
-      // 1) Coba kirim via QUEUE (benar-benar async)
       $conn = config('queue.default', 'sync');
+      $dispatched = false;
+
       try {
         if ($conn !== 'sync') {
-          SendWhatsAppMessage::dispatch($to, $msg, $orderId)->onQueue('wa');
-          Log::info('wa.queue.dispatched', compact('orderId','to','conn'));
-          return; // non-blocking
+          \App\Jobs\SendWhatsAppMessage::dispatch($to, $msg, $orderId)->onQueue('wa');
+          $dispatched = true;
         }
       } catch (\Throwable $e) {
-        Log::warning('wa.queue.dispatch_failed', ['order_id'=>$orderId,'err'=>$e->getMessage()]);
+        \Log::warning('wa.queue.dispatch_failed', ['order_id'=>$orderId,'err'=>$e->getMessage()]);
       }
 
-      // 2) Fallback: jalankan setelah response dikirim (tidak butuh worker)
-      try {
-        SendWhatsAppMessage::dispatchAfterResponse($to, $msg, $orderId);
-        Log::info('wa.after_response.dispatched', compact('orderId','to'));
-        return; // non-blocking untuk user
-      } catch (\Throwable $e) {
-        Log::warning('wa.after_response.failed', ['order_id'=>$orderId,'err'=>$e->getMessage()]);
+      if (!$dispatched) {
+        try {
+          \App\Jobs\SendWhatsAppMessage::dispatchAfterResponse($to, $msg, $orderId);
+          $dispatched = true;
+        } catch (\Throwable $e) {
+          \Log::warning('wa.after_response.failed', ['order_id'=>$orderId,'err'=>$e->getMessage()]);
+        }
       }
 
-      // 3) Fallback terakhir: kirim sinkron (supaya tidak hilang sama sekali)
-      app(\App\Services\WhatsAppGateway::class)->send($to, $msg);
-      Log::info('wa.sync.sent', compact('orderId','to'));
+      if (!$dispatched) {
+        app(\App\Services\WhatsAppGateway::class)->send($to, $msg);
+        $dispatched = true;
+      }
+
+      // Stempel hanya kalau ada upaya kirim
+      if ($dispatched) {
+        \DB::table('payments')
+          ->where('order_id', $orderId)
+          ->whereNull('notified_invoice_at')
+          ->update(['notified_invoice_at' => now()]);
+      }
     } catch (\Throwable $e) {
       \Log::warning('hotspot.invoice.whatsapp_failed', ['order_id' => $orderId, 'err' => $e->getMessage()]);
     }
