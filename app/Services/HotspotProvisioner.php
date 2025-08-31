@@ -229,18 +229,40 @@ class HotspotProvisioner
   {
     $order    = \App\Models\HotspotOrder::where('order_id', $u->order_id)->first();
     $clientId = $this->resolveClientId($u->order_id, $order);
-    $router   = $this->resolveRouter($clientId);
+    $client   = Client::where('client_id', $clientId)->first();
+    if (!$client) { Log::warning('queuePush: client not found', compact('clientId')); return; }
 
-    if (!$router || empty($router['enable_push'])) { \Log::info('queuePush: push disabled'); return; }
+    $router = $this->resolveRouter($clientId);
+    if (!$router || empty($router['enable_push'])) { Log::info('queuePush: push disabled'); return; }
     if (empty($router['host']) || empty($router['user']) || empty($router['pass'])) {
-      \Log::warning('queuePush: router config incomplete', ['client_id'=>$clientId]); return;
+      Log::warning('queuePush: router config incomplete', ['client_id'=>$clientId, 'router'=>$router]);
+      return;
     }
 
+    $limit = $u->duration_minutes ? ($u->duration_minutes . 'm') : null;
+
     try {
-      \App\Jobs\PushHotspotUserToRouter::dispatch($u->id)->onQueue('router');
-      \Log::info('router.queue.dispatched', ['order_id'=>$u->order_id, 'u_id'=>$u->id]);
+      $conn = config('queue.default', 'sync');
+
+      if ($conn !== 'sync') {
+        // ⬇️ pakai job yang SUDAH ADA
+        ProvisionHotspotUser::dispatch(
+          $client->id, $u->username, $u->password, $u->profile, $limit
+        )->onQueue('router');
+
+        Log::info('router.queue.dispatched', ['order_id'=>$u->order_id, 'client_pk'=>$client->id, 'conn'=>$conn]);
+        return;
+      }
+
+      // Tanpa worker → tetap non-blocking pakai afterResponse
+      ProvisionHotspotUser::dispatchAfterResponse(
+        $client->id, $u->username, $u->password, $u->profile, $limit
+      )->onQueue('router');
+
+      Log::info('router.queue.after_response', ['order_id'=>$u->order_id]);
     } catch (\Throwable $e) {
-      \Log::warning('router.queue.dispatch_failed_fallback_sync', ['order_id'=>$u->order_id, 'err'=>$e->getMessage()]);
+      Log::warning('router.queue.dispatch_failed_fallback_sync', ['order_id'=>$u->order_id, 'err'=>$e->getMessage()]);
+      // Fallback: jalankan sinkron agar user tetap ter-provision
       $this->pushToMikrotik($u);
     }
   }
