@@ -135,51 +135,47 @@ class ReturnController extends Controller
   public function show(Request $r, HotspotProvisioner $prov)
   {
     $orderId = $r->query('order_id');
-    if (!$orderId) return view('payments.return', ['orderId'=>null,'status'=>'MISSING','creds'=>null]);
+    if (!$orderId) {
+      return view('payments.return', ['orderId'=>null,'status'=>'MISSING','creds'=>null]);
+    }
 
-    $p = Payment::where('order_id', $orderId)->first();
-    if (!$p) return view('payments.return', ['orderId'=>$orderId,'status'=>'UNKNOWN','creds'=>null]);
+    $p = \App\Models\Payment::where('order_id', $orderId)->first();
+    if (!$p) {
+      return view('payments.return', ['orderId'=>$orderId,'status'=>'UNKNOWN','creds'=>null]);
+    }
 
-    $prevStatus = $p->status; // [ADD] simpan status lama
-    
-    // Pastikan status terbaru (fallback jika webhook belum sampai)
-    $this->initMidtrans();
+    // --- DB-only, cepat ---
+    $status = $p->status;
+    $u = \App\Models\HotspotUser::where('order_id', $orderId)->first();
+    $creds = $u ? ['u'=>$u->username, 'p'=>$u->password] : null;
+
+    // --- Trigger async setelah response ---
     try {
-      $latest = \Midtrans\Transaction::status($orderId);
-      $arr = is_array($latest) ? $latest : json_decode(json_encode($latest), true);
-      $rawStatus = strtolower($arr['transaction_status'] ?? 'pending');
-      $incoming = app(\App\Payments\Providers\MidtransAdapter::class)->normalizeStatus($rawStatus);
-
-      $p->status = \App\Models\Payment::mergeStatus($p->status, $incoming);
-      $p->raw = array_merge(is_array($p->raw)?$p->raw:[], $arr);
-      if (in_array($rawStatus, ['capture','settlement','success'], true) && !$p->paid_at) $p->paid_at = now();
-      $p->save();
-    } catch (\Throwable $e) { /* ignore; gunakan status DB */ }
-
-    $creds = null;
-    if ($p->status === \App\Models\Payment::S_PAID) {
-      // Provision di sini juga (fallback) agar user langsung dapat akun
-      $u = $prov->provision($orderId);
-      if ($u) { $prov->pushToMikrotik($u); $creds = ['u'=>$u->username,'p'=>$u->password]; }
+      if ($status !== \App\Models\Payment::S_PAID) {
+        // sinkronisasi status ke Midtrans di background
+        \App\Jobs\SyncMidtransStatus::dispatch($orderId)->afterResponse();
+      } else {
+        // kalau sudah paid tapi belum ada user → provision & push di background
+        if (!$u) {
+          \App\Jobs\ProvisionHotspotIfPaid::dispatch($orderId)->onQueue('router')->afterResponse();
+        }
+        // kirim WA (job kamu sendiri)
+        $this->waSendPaid($orderId); // method kamu sudah async-first; tetap dipanggil, cepat.
+      }
+    } catch (\Throwable $e) {
+      \Log::debug('return.async.enqueue_failed', ['order_id'=>$orderId, 'err'=>$e->getMessage()]);
     }
 
-    // [ADD] Jika terjadi transisi ke PAID, kirim WA di sini
-    if ($p->status === \App\Models\Payment::S_PAID && $prevStatus !== \App\Models\Payment::S_PAID) {
-      $this->waSendPaid($orderId);
-    }
-
+    // --- render cepat; smart loader akan poll JSON & auto refresh bila perlu ---
     $order   = \App\Models\HotspotOrder::where('order_id',$orderId)->first();
     $client  = $order ? \App\Models\Client::where('client_id',$order->client_id)->first() : null;
 
-    $authMode = $client ? $client->auth_mode : null;
-    $hotspotPortal = $client ? $client->hotspot_portal : null;
-
     return view('payments.return', [
-      'orderId'   => $orderId,
-      'status'    => $p->status,
-      'creds'     => $creds,
-      'authMode'  => $authMode,
-      'hotspotPortal' => $hotspotPortal,
+      'orderId'       => $orderId,
+      'status'        => $status,
+      'creds'         => $creds,
+      'authMode'      => $client ? $client->auth_mode : null,
+      'hotspotPortal' => $client ? $client->hotspot_portal : null,
     ]);
   }
 }

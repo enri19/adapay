@@ -12,12 +12,29 @@ use App\Support\OrderId;
 
 class WebhookController extends Controller
 {
-    private function normalizeIncoming(string $txStatus): string {
-        $s = strtolower($txStatus);
-        if (in_array($s, ['capture','settlement','success'], true)) return 'PAID';
-        if (in_array($s, ['pending','authorize'], true)) return 'PENDING';
-        if (in_array($s, ['deny','expire','cancel','failure'], true)) return 'FAILED';
-        return 'PENDING';
+    private function normalizeIncoming(string $tx): string
+    {
+        switch (strtolower($tx)) {
+            case 'capture':        // cc paid (fraud status accept)
+            case 'settlement':     // semua metode settle
+            return 'PAID';
+            case 'pending':
+            return 'PENDING';
+            case 'expire':
+            return 'EXPIRED';
+            case 'cancel':
+            case 'deny':           // treat as cancelled on our side
+            return 'CANCELLED';
+            case 'refund':
+            return 'REFUND';
+            case 'partial_refund':
+            return 'PARTIAL_REFUND';
+            case 'challenge':
+            return 'CHALLENGE';
+            default:
+            // Jangan paksa ke PENDING—biarkan apa adanya untuk di-handle mergeStatus
+            return strtoupper($tx);
+        }
     }
 
     // aman ubah mixed → array
