@@ -141,7 +141,8 @@ class ReturnController extends Controller
 
     $p = \App\Models\Payment::where('order_id', $orderId)->first();
     if (!$p) {
-      return view('payments.return', ['orderId'=>$orderId,'status'=>'UNKNOWN','creds'=>null]);
+      \App\Jobs\ProvisionHotspotIfPaid::dispatch($orderId)->onQueue('router');
+      \App\Jobs\PaymentBecamePaid::dispatch($orderId)->onQueue('wa');
     }
 
     // --- DB-only, cepat ---
@@ -152,15 +153,10 @@ class ReturnController extends Controller
     // --- Trigger async setelah response ---
     try {
       if ($status !== \App\Models\Payment::S_PAID) {
-        // sinkronisasi status ke Midtrans di background
         \App\Jobs\SyncMidtransStatus::dispatch($orderId)->afterResponse();
       } else {
-        // kalau sudah paid tapi belum ada user → provision & push di background
-        if (!$u) {
-          \App\Jobs\ProvisionHotspotIfPaid::dispatch($orderId)->onQueue('router')->afterResponse();
-        }
-        // kirim WA (job kamu sendiri)
-        \App\Jobs\SyncMidtransStatus::dispatch($orderId)->afterResponse();
+        if (!$u) \App\Jobs\ProvisionHotspotIfPaid::dispatch($orderId)->onQueue('router')->afterResponse();
+        // WA: cukup biarkan PaymentBecamePaid yang handle ketika status jadi PAID
       }
     } catch (\Throwable $e) {
       \Log::debug('return.async.enqueue_failed', ['order_id'=>$orderId, 'err'=>$e->getMessage()]);
