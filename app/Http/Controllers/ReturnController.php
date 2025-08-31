@@ -160,7 +160,7 @@ class ReturnController extends Controller
           \App\Jobs\ProvisionHotspotIfPaid::dispatch($orderId)->onQueue('router')->afterResponse();
         }
         // kirim WA (job kamu sendiri)
-        $this->waSendPaid($orderId); // method kamu sudah async-first; tetap dipanggil, cepat.
+        \App\Jobs\SyncMidtransStatus::dispatch($orderId)->afterResponse();
       }
     } catch (\Throwable $e) {
       \Log::debug('return.async.enqueue_failed', ['order_id'=>$orderId, 'err'=>$e->getMessage()]);

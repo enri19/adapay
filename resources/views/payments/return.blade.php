@@ -3,28 +3,31 @@
 
 @push('head')
 <style>
-/* ===== Smart Loader ===== */
+/* ===== Smart Loader (polished) ===== */
 #smart-loader{
-  position:fixed; inset:0; z-index:60; display:none;
-  align-items:center; justify-content:center;
-  background:linear-gradient(135deg, rgba(15,23,42,.7), rgba(2,6,23,.7));
+  position:fixed; inset:0; z-index:9999;
+  display:flex; align-items:center; justify-content:center;
+  background:linear-gradient(135deg, rgba(15,23,42,.65), rgba(2,6,23,.65));
   backdrop-filter: blur(6px) saturate(120%);
+  /* smoother show/hide tanpa FOUC */
+  opacity:0; visibility:hidden; pointer-events:none; transition:opacity .18s ease, visibility .18s ease;
 }
-#smart-loader.is-visible{ display:flex; }
+#smart-loader.is-visible{ opacity:1; visibility:visible; pointer-events:auto; }
 
 .loader-card{
   width:min(560px, 92vw);
-  background:rgba(255,255,255,.9);
+  background:rgba(255,255,255,.92);
   border:1px solid rgba(0,0,0,.08);
   border-radius:16px;
-  box-shadow: 0 20px 65px rgba(0,0,0,.25);
+  box-shadow: 0 22px 65px rgba(0,0,0,.28);
   overflow:hidden;
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
 }
 
 .loader-head{
-  padding:18px 18px 14px; display:flex; align-items:center; gap:12px;
+  padding:16px 18px 12px; display:flex; align-items:center; gap:12px;
   border-bottom:1px solid rgba(0,0,0,.06);
-  background:linear-gradient(180deg, rgba(255,255,255,1), rgba(255,255,255,.7));
+  background:linear-gradient(180deg, rgba(255,255,255,1), rgba(255,255,255,.75));
 }
 .spin{
   width:26px;height:26px;border-radius:999px; border:3px solid rgba(0,0,0,.18); border-top-color:#2563eb;
@@ -33,8 +36,9 @@
 @keyframes spin{to{transform:rotate(360deg)}}
 .loader-title{ font-weight:700; font-size:1rem; color:#0f172a; }
 .loader-sub{ font-size:.85rem; color:#475569; }
+.mono, code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
 
-.loader-body{ padding:16px 18px 18px; }
+.loader-body{ padding:14px 18px 16px; }
 
 .steps{ list-style:none; margin:0; padding:0; display:grid; gap:10px; }
 .step{
@@ -46,16 +50,14 @@
   background:#e5e7eb; display:flex;align-items:center;justify-content:center;
   font-size:12px; color:#fff;
 }
-.step .txt{ line-height:1.2; color:#0f172a; font-weight:600; }
+.step .txt{ line-height:1.15; color:#0f172a; font-weight:600; }
 .step .help{ color:#64748b; font-size:.82rem; margin-top:2px; }
 
 .step.is-active{ border-color:#93c5fd; background:linear-gradient(180deg,#fff,#f8fbff); }
 .step.is-active .dot{ background:#2563eb; box-shadow:0 0 0 4px rgba(37,99,235,.12); }
-.step.is-done  { opacity:.8; }
+.step.is-done  { opacity:.85; }
 .step.is-done .dot{ background:#10b981; }
-.step.is-done .dot::before{
-  content:'✓'; font-weight:700; transform:translateY(-1px);
-}
+.step.is-done .dot::before{ content:'✓'; font-weight:700; transform:translateY(-1px); }
 
 .progress{
   height:6px; border-radius:999px; background:#e5e7eb; overflow:hidden; margin-top:12px;
@@ -298,78 +300,85 @@
 @push('scripts')
 <script>
 (function(){
-  const ORDER_ID = @json($orderId);
-  const CURRENT_STATUS = @json($status);
-  const HAS_CREDS = Boolean(@json((bool) $creds));
-  const LOADER = document.getElementById('smart-loader');
-  const PROG = LOADER?.querySelector('.progress > i');
-  const STEPS = LOADER?.querySelectorAll('.step');
-  const ELAPSED = document.getElementById('elapsed');
-  const BTN_REFRESH = document.getElementById('btn-refresh');
+  // ------ data dari server ------
+  var ORDER_ID = @json($orderId);
+  var CURRENT_STATUS = String(@json($status ?? '')).toUpperCase(); // normalisasi
+  var HAS_CREDS = Boolean(@json((bool) $creds));
 
-  // tampilkan loader kalau:
-  // - status PENDING, atau
-  // - status PAID tapi kredensial belum tersedia
-  const shouldShowLoader = () => (CURRENT_STATUS === 'PENDING') || (CURRENT_STATUS === 'PAID' && !HAS_CREDS);
+  // ------ dom refs (tanpa optional chaining) ------
+  var LOADER = document.getElementById('smart-loader');
+  var PROG = LOADER ? LOADER.querySelector('.progress > i') : null;
+  var PROG_WR = PROG ? PROG.parentElement : null;
+  var STEPS = LOADER ? LOADER.querySelectorAll('.step') : [];
+  var ELAPSED = document.getElementById('elapsed');
+  var BTN_REFRESH = document.getElementById('btn-refresh');
 
-  // helper UI
-  function setStepState(activeIndex){ // 1..3
-    if (!STEPS) return;
-    STEPS.forEach((li, idx) => {
-      const i = idx+1;
-      li.classList.remove('is-active','is-done');
-      if (i < activeIndex) li.classList.add('is-done');
-      else if (i === activeIndex) li.classList.add('is-active');
-    });
-    const pct = Math.min(100, Math.max(0, (activeIndex-1) * 50)); // 0, 50, 100
-    if (PROG){ PROG.style.width = pct + '%'; PROG.parentElement?.setAttribute('aria-valuenow', pct); }
+  // Tunjukkan loader jika PENDING atau PAID tapi belum ada kredensial
+  function shouldShowLoader(){
+    return (CURRENT_STATUS === 'PENDING') || (CURRENT_STATUS === 'PAID' && !HAS_CREDS);
   }
 
-  // elapsed timer
-  let t0 = Date.now(), tickTmr = null;
+  // UI helpers
+  function setStepState(activeIndex){ // 1..3
+    if (!STEPS || !STEPS.length) return;
+    for (var i=0;i<STEPS.length;i++){
+      var li = STEPS[i];
+      var pos = i+1;
+      li.classList.remove('is-active'); li.classList.remove('is-done');
+      if (pos < activeIndex) li.classList.add('is-done');
+      else if (pos === activeIndex) li.classList.add('is-active');
+    }
+    var pct = Math.min(100, Math.max(0, (activeIndex-1) * 50)); // 0,50,100 untuk 3 step
+    if (PROG){ PROG.style.width = pct + '%'; }
+    if (PROG_WR){ PROG_WR.setAttribute('aria-valuenow', pct); }
+  }
+
+  var t0 = Date.now(), tickTmr = null, pollTmr = null;
   function startElapsed(){
     if (!ELAPSED) return;
-    tickTmr = setInterval(()=>{
-      const s = Math.floor((Date.now()-t0)/1000);
+    tickTmr = setInterval(function(){
+      var s = Math.floor((Date.now()-t0)/1000);
       ELAPSED.textContent = s + 's';
     }, 1000);
   }
 
-  // polling status payment JSON: GET /payments/{orderId}
-  let pollTmr = null, interval = 2000, hardStopMs = 120000; // 2 menit batas keras
+  // Poll status pembayaran → /payments/{orderId} (controller PaymentController@show)
+  var interval = 2000, hardStopMs = 120000; // 2 menit
   function poll(){
-    fetch('/payments/' + encodeURIComponent(ORDER_ID), {headers:{'Accept':'application/json'}})
-      .then(r=>r.ok ? r.json() : Promise.reject(new Error('HTTP '+r.status)))
-      .then(data=>{
-        const status = (data.status || '').toUpperCase();
+    fetch('/payments/' + encodeURIComponent(ORDER_ID), { headers: { 'Accept':'application/json' }, credentials: 'same-origin' })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(data){
+        var status = String(data.status || '').toUpperCase();
+
         if (status === 'PENDING'){
           setStepState(1);
         } else if (status === 'PAID'){
+          // Saat sudah PAID: anggap sedang provision/push → step 2
           setStepState(2);
-          // kalau halaman ini belum punya kredensial, coba soft-refresh supaya controller generate & tampilkan
+          // Kalau halaman ini belum punya kredensial, reload ringan agar controller render creds
           if (!HAS_CREDS){
-            // beri jeda dikit agar provision job selesai membuat HotspotUser
-            setTimeout(()=> location.reload(), 1200);
+            setTimeout(function(){ location.reload(); }, 1200);
           } else {
-            // sudah ada creds → kita sembunyikan loader
+            // Kalau sudah punya kredensial, finalisasi → step 3 & hide
+            setStepState(3);
             hideLoader();
           }
-        } else if (status === 'FAILED' || status === 'CANCEL' || status === 'EXPIRE'){
-          // stop polling, tampilkan informasi dari server (halaman sudah menampilkan status)
-          hideLoader();
         } else {
-          // status lain, keep polling
-          setStepState(1);
+          // FAILED/CANCEL/EXPIRE/UNKNOWN → tutup loader (biar user lihat status di halaman)
+          hideLoader();
         }
       })
-      .catch(()=>{ /* diamkan; mungkin transien */ })
-      .finally(()=>{
-        if (!LOADER?.classList.contains('is-visible')) return;
+      .catch(function(){
+        // diamkan error jaringan sesaat
+      })
+      .finally(function(){
+        if (!isVisible(LOADER)) return;
         if ((Date.now()-t0) > hardStopMs){ hideLoader(); return; }
         pollTmr = setTimeout(poll, interval);
       });
   }
 
+  function isVisible(el){ return el && el.classList.contains('is-visible'); }
   function showLoader(){
     if (!LOADER) return;
     LOADER.classList.add('is-visible');
@@ -384,9 +393,11 @@
     if (tickTmr) clearInterval(tickTmr);
   }
 
-  if (shouldShowLoader()) showLoader();
+  if (ORDER_ID && shouldShowLoader()) showLoader();
 
-  BTN_REFRESH?.addEventListener('click', ()=> location.reload());
+  if (BTN_REFRESH){
+    BTN_REFRESH.addEventListener('click', function(){ location.reload(); });
+  }
 })();
 </script>
 @endpush

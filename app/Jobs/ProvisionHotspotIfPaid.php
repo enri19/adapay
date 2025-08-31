@@ -15,8 +15,14 @@ class ProvisionHotspotIfPaid implements ShouldQueue
 {
   use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+  /** @var string */
+  protected $orderId;
+
   public int $tries = 5;
-  public function backoff(){ return [10,30,60,120,300]; }
+  public function backoff()
+  {
+    return [10, 30, 60, 120, 300];
+  }
 
   public function __construct(string $orderId) {
     $this->orderId = $orderId;
