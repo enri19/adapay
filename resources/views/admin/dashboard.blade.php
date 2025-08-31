@@ -19,30 +19,11 @@
   .grid-2{display:grid;gap:12px}
   @media(min-width:768px){ .grid-2{grid-template-columns:1fr 1fr} }
 
-  .mini-bars{
-    display:flex;
-    align-items:flex-end;
-    gap:6px;
-    height:72px;
-    padding:0 2px;
-    overflow:hidden;
-  }
-  .mini-bars > div{
-    position:relative;
-    flex:1 0 0;
-    display:flex;
-    align-items:flex-end;
-  }
-  .mini-bars .bar{
-    width:100%;
-    background:#e5edff;
-    border-radius:6px;
-  }
-  .mini-bars .bar.is-sum{
-    background:#d1fae5;
-    position:absolute;
-    left:3px; right:3px; bottom:0; opacity:.9; border-radius:6px;
-  }
+  .mini-bars{display:flex;align-items:flex-end;gap:6px;height:72px}
+  .mini-bars>div{flex:1;position:relative;display:flex;align-items:flex-end}
+  .mini-bars .bar{background:#e5edff;border-radius:6px;width:100%}
+  .mini-bars .bar.is-sum{background:#d1fae5;position:absolute;left:3px;right:3px;bottom:0;opacity:.9;border-radius:6px}
+
   .section-title{font-weight:700;margin-bottom:8px}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
   .table-wrap{overflow:auto}
