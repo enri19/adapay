@@ -227,43 +227,14 @@ class HotspotProvisioner
 
   public function queuePushToMikrotik(HotspotUser $u): void
   {
-    $order    = \App\Models\HotspotOrder::where('order_id', $u->order_id)->first();
-    $clientId = $this->resolveClientId($u->order_id, $order);
-    $client   = Client::where('client_id', $clientId)->first();
-    if (!$client) { Log::warning('queuePush: client not found', compact('clientId')); return; }
-
-    $router = $this->resolveRouter($clientId);
-    if (!$router || empty($router['enable_push'])) { Log::info('queuePush: push disabled'); return; }
-    if (empty($router['host']) || empty($router['user']) || empty($router['pass'])) {
-      Log::warning('queuePush: router config incomplete', ['client_id'=>$clientId, 'router'=>$router]);
-      return;
-    }
-
-    $limit = $u->duration_minutes ? ($u->duration_minutes . 'm') : null;
-
     try {
-      $conn = config('queue.default', 'sync');
-
-      if ($conn !== 'sync') {
-        // ⬇️ pakai job yang SUDAH ADA
-        ProvisionHotspotUser::dispatch(
-          $client->id, $u->username, $u->password, $u->profile, $limit
-        )->onQueue('router');
-
-        Log::info('router.queue.dispatched', ['order_id'=>$u->order_id, 'client_pk'=>$client->id, 'conn'=>$conn]);
-        return;
-      }
-
-      // Tanpa worker → tetap non-blocking pakai afterResponse
-      ProvisionHotspotUser::dispatchAfterResponse(
-        $client->id, $u->username, $u->password, $u->profile, $limit
-      )->onQueue('router');
-
-      Log::info('router.queue.after_response', ['order_id'=>$u->order_id]);
-    } catch (\Throwable $e) {
-      Log::warning('router.queue.dispatch_failed_fallback_sync', ['order_id'=>$u->order_id, 'err'=>$e->getMessage()]);
-      // Fallback: jalankan sinkron agar user tetap ter-provision
+      // dorong langsung; pushToMikrotik() sudah aman (cek enable_push, konfigurasi, logging, try/catch)
       $this->pushToMikrotik($u);
+    } catch (\Throwable $e) {
+      \Log::error('router.push.exception', [
+        'order_id' => $u->order_id,
+        'err'      => $e->getMessage(),
+      ]);
     }
   }
 }
