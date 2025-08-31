@@ -24,6 +24,17 @@
   .mini-bars .bar{background:#e5edff;border-radius:6px;width:100%}
   .mini-bars .bar.is-sum{background:#d1fae5;position:absolute;left:3px;right:3px;bottom:0;opacity:.9;border-radius:6px}
 
+  .card--chart{
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+  }
+  .card--chart .mini-bars-wrap{
+    flex:1;
+    display:flex;
+    align-items:flex-end;
+  }
+
   .section-title{font-weight:700;margin-bottom:8px}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
   .table-wrap{overflow:auto}
@@ -75,17 +86,19 @@
           $maxC = max($seriesCount) ?: 1;
           $maxS = max($seriesSum) ?: 1;
         @endphp
-        <div class="mini-bars" aria-hidden="true">
-          @foreach($seriesCount as $i => $c)
-            @php
-              $h = max(8, round(($c / $maxC) * 70)); // min 8px
-              $hs = max(6, round((($seriesSum[$i] ?? 0) / $maxS) * 56)); // overlay revenue
-            @endphp
-            <div style="position:relative">
-              <div class="bar" style="height:{{ $h }}px"></div>
-              <div class="bar is-sum" style="height:{{ $hs }}px;position:absolute;left:3px;right:3px;bottom:0;opacity:.9"></div>
-            </div>
-          @endforeach
+        <div class="mini-bars-wrap">
+          <div class="mini-bars" aria-hidden="true">
+            @foreach($seriesCount as $i => $c)
+              @php
+                $h = max(8, round(($c / $maxC) * 70)); // min 8px
+                $hs = max(6, round((($seriesSum[$i] ?? 0) / $maxS) * 56)); // overlay revenue
+              @endphp
+              <div style="position:relative">
+                <div class="bar" style="height:{{ $h }}px"></div>
+                <div class="bar is-sum" style="height:{{ $hs }}px;position:absolute;left:3px;right:3px;bottom:0;opacity:.9"></div>
+              </div>
+            @endforeach
+          </div>
         </div>
         <div class="help" style="margin-top:6px">
           <span class="pill" style="border-color:#c7d2fe;background:#eef2ff">Volume</span>
@@ -161,17 +174,19 @@
           $maxCM = max($seriesCountM ?? []) ?: 1;
           $maxSM = max($seriesSumM ?? []) ?: 1;
         @endphp
-        <div class="mini-bars" aria-hidden="true">
-          @foreach(($seriesCountM ?? []) as $i => $c)
-            @php
-              $h = max(8, round(($c / $maxCM) * 70));
-              $hs = max(6, round((($seriesSumM[$i] ?? 0) / $maxSM) * 56));
-            @endphp
-            <div style="position:relative">
-              <div class="bar" style="height:{{ $h }}px"></div>
-              <div class="bar is-sum" style="height:{{ $hs }}px;position:absolute;left:3px;right:3px;bottom:0;opacity:.9"></div>
-            </div>
-          @endforeach
+        <div class="mini-bars-wrap">
+          <div class="mini-bars" aria-hidden="true">
+            @foreach(($seriesCountM ?? []) as $i => $c)
+              @php
+                $h = max(8, round(($c / $maxCM) * 70));
+                $hs = max(6, round((($seriesSumM[$i] ?? 0) / $maxSM) * 56));
+              @endphp
+              <div style="position:relative">
+                <div class="bar" style="height:{{ $h }}px"></div>
+                <div class="bar is-sum" style="height:{{ $hs }}px;position:absolute;left:3px;right:3px;bottom:0;opacity:.9"></div>
+              </div>
+            @endforeach
+          </div>
         </div>
         <div class="help" style="margin-top:6px">
           <span class="pill" style="border-color:#c7d2fe;background:#eef2ff">Volume</span>
