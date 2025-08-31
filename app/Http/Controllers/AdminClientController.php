@@ -61,6 +61,7 @@ class AdminClientController extends Controller
       'auth_mode'       => 'required|in:code,userpass',
       'hotspot_portal'  => ['nullable', 'string', 'max:255'],
       'enable_push'     => ['sometimes','boolean'],
+      'admin_fee_flat'  => ['nullable','int'],
       'is_active'       => ['sometimes','boolean'],
     ]);
   }
