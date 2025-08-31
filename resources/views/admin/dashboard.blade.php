@@ -11,7 +11,7 @@
 
   .tabs{display:flex;gap:8px;margin-top:12px}
   .tab-btn{appearance:none;border:1px solid var(--bd);background:var(--card);padding:8px 12px;border-radius:.5rem;cursor:pointer;font-weight:600}
-  .tab-btn[aria-selected="true"]{outline:2px solid #6366f1; border-color:#6366f1}
+  .tab-btn[aria-selected="true"]{outline:2px solid #6366f1;border-color:#6366f1}
   .tab-panels{margin-top:10px}
   .tab-panel{display:none}
   .tab-panel.active{display:block}
@@ -19,21 +19,14 @@
   .grid-2{display:grid;gap:12px}
   @media(min-width:768px){ .grid-2{grid-template-columns:1fr 1fr} }
 
-  .mini-bars{display:flex;align-items:flex-end;gap:6px;height:72px}
-  .mini-bars>div{flex:1;position:relative;display:flex;align-items:flex-end}
-  .mini-bars .bar{background:#e5edff;border-radius:6px;width:100%}
-  .mini-bars .bar.is-sum{background:#d1fae5;position:absolute;left:3px;right:3px;bottom:0;opacity:.9;border-radius:6px}
+  /* mini-bars kembali ke grid (sesuai versi stabil kamu) */
+  .mini-bars{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px;align-items:end;height:72px}
+  .mini-bars .bar{background:#e5edff;border-radius:6px}
+  .mini-bars .bar.is-sum{background:#d1fae5}
 
-  .card--chart{
-    display:flex;
-    flex-direction:column;
-    justify-content:space-between;
-  }
-  .card--chart .mini-bars-wrap{
-    flex:1;
-    display:flex;
-    align-items:flex-end;
-  }
+  /* dorong mini-bars ke bawah card */
+  .card--chart{display:flex;flex-direction:column}
+  .card--chart .mini-bars{margin-top:auto}
 
   .section-title{font-weight:700;margin-bottom:8px}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
@@ -111,6 +104,7 @@
           @else
             <span class="help"> | Basis: Net untuk client</span>
           @endif
+          <span class="help"> | Total: Rp{{ number_format((int)($total7 ?? 0),0,',','.') }}</span>
         </div>
       </div>
 
