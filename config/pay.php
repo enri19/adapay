@@ -7,5 +7,6 @@ return [
   // per client_id
   'admin_fee_flat_per_client' => [
     'SIMON'     => 500,
+    'BUENI'     => 500,
   ],
 ];
