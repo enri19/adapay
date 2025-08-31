@@ -86,7 +86,7 @@ class SendWhatsAppPaid implements ShouldQueue
     string $authMode = 'userpass'
   ): string
   {
-    $orderUrl = url("/hotspot/order/{$orderId}");
+    $orderUrl = \App\Support\PublicUrl::order($orderId);
     $dur = $duration ? "{$duration} menit" : '-';
 
     $header = [
