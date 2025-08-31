@@ -150,17 +150,12 @@ class ReturnController extends Controller
     $u = \App\Models\HotspotUser::where('order_id', $orderId)->first();
     $creds = $u ? ['u'=>$u->username, 'p'=>$u->password] : null;
 
-    // --- Trigger async setelah response ---
+    // kalau belum PAID, sinkron ulang status di background
     try {
       if ($status !== \App\Models\Payment::S_PAID) {
         \App\Jobs\SyncMidtransStatus::dispatch($orderId)->afterResponse();
-      } else {
-        if (!$u) \App\Jobs\ProvisionHotspotIfPaid::dispatch($orderId)->onQueue('router')->afterResponse();
-        // WA: cukup biarkan PaymentBecamePaid yang handle ketika status jadi PAID
       }
-    } catch (\Throwable $e) {
-      \Log::debug('return.async.enqueue_failed', ['order_id'=>$orderId, 'err'=>$e->getMessage()]);
-    }
+    } catch (\Throwable $e) { /* ignore */ }
 
     // --- render cepat; smart loader akan poll JSON & auto refresh bila perlu ---
     $order   = \App\Models\HotspotOrder::where('order_id',$orderId)->first();

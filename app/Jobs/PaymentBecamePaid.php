@@ -3,93 +3,55 @@
 namespace App\Jobs;
 
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use App\Services\HotspotProvisioner;
+use App\Models\Payment;
 
-use App\Models\HotspotOrder;
-use App\Models\HotspotUser;
-use App\Services\WhatsAppGateway;
-use App\Support\Phone;
-
-class PaymentBecamePaid implements ShouldQueue
+class PaymentBecamePaid implements ShouldQueue, ShouldBeUnique
 {
   use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-  protected $orderId;
+  public string $orderId;
 
   public $tries = 5;
-  public function backoff(){ return [5, 10, 30, 60, 120]; }
+  public function backoff(){ return [5,10,30,60,120]; }
 
-  public function __construct($orderId)
+  // cegah job kembar di antrean
+  public function uniqueId(){ return 'paid:'.$this->orderId; }
+  public $uniqueFor = 120; // 2 menit
+
+  public function __construct(string $orderId)
   {
-    $this->orderId = (string) $orderId;
+    $this->orderId = $orderId;
   }
 
-  // (opsional) kalau mau memaksa queue di level job:
-  // public function viaQueue(){ return 'wa'; }
-
-  public function handle(WhatsAppGateway $wa)
+  public function handle(HotspotProvisioner $prov)
   {
-    $order = HotspotOrder::where('order_id', $this->orderId)->first();
-    if (!$order || !$order->buyer_phone) return;
+    // Guard cepat: pastikan benar-benar PAID
+    $p = Payment::where('order_id', $this->orderId)->first();
+    if (!$p || $p->status !== Payment::S_PAID) return;
 
-    $user = HotspotUser::where('order_id', $this->orderId)->first();
-    $to   = Phone::normalizePhone($order->buyer_phone);
+    // Guard anti-dobel berbasis cache (cepat). Optional: pakai kolom DB notified_paid_at untuk persist.
+    if (!Cache::add('paid:notify:'.$this->orderId, 1, 10*60)) {
+      Log::info('paid.guard.cache.hit', ['order_id'=>$this->orderId]);
+      return;
+    }
 
-    // ambil auth_mode
-    $client = \App\Models\Client::where('client_id', $order->client_id)->first();
-    $authMode = $client ? $client->auth_mode : 'userpass';
+    // 1) Provision (idempotent; akan return existing kalau sudah ada)
+    $u = $prov->provision($this->orderId);
 
-    $msg = $user
-      ? $this->buildWaPaidWithCredsMessage(
-          $this->orderId,
-          $user->username,
-          $user->password,
-          $user->profile,
-          (int)$user->duration_minutes,
-          $authMode
-        )
-      : $this->buildWaPaidSimpleMessage($this->orderId);
+    // 2) Push ke Mikrotik lewat job unik (supaya tidak block di sini)
+    if ($u) $prov->queuePushToMikrotik($u);
 
-    $wa->send($to, $msg);
-    Log::info('wa.paid.sent', ['order_id'=>$this->orderId, 'to'=>$to]);
-  }
+    // 3) Kirim WA invoice/creds via job WA (non-blocking)
+    \App\Jobs\SendWhatsAppPaid::dispatch($this->orderId)->onQueue('wa');
 
-  private function buildWaPaidSimpleMessage($orderId)
-  {
-    $orderUrl = url("/hotspot/order/{$orderId}");
-    return implode("\n", [
-      "*Pembayaran Berhasil ✅*",
-      "Order ID : {$orderId}",
-      "",
-      "Akun kamu sedang disiapkan.",
-      "Pantau di: {$orderUrl}",
-      "_Terima kasih_ 🙏",
-    ]);
-  }
-
-  private function buildWaPaidWithCredsMessage($orderId,$username,$password,$profile,$duration,$authMode='userpass')
-  {
-    $orderUrl = url("/hotspot/order/{$orderId}");
-    $dur = $duration ? "{$duration} menit" : '-';
-    $isCode = ($authMode === 'code') || (strtoupper($username) === strtoupper($password));
-
-    $header = [
-      "*Pembayaran Berhasil ✅*",
-      "Order ID : {$orderId}",
-      "Profile  : {$profile} ({$dur})",
-      ""
-    ];
-
-    $creds = $isCode
-      ? ["*Kode Hotspot Kamu*","Kode : `{$username}`","","Gunakan kode tersebut sebagai *Username* dan *Password* saat login."]
-      : ["*Akun Hotspot Kamu*","Username : `{$username}`","Password : `{$password}`"];
-
-    $footer = ["","Kamu bisa login sekarang.","Cek kembali di: {$orderUrl}","_Terima kasih_ 🙏"];
-
-    return implode("\n", array_merge($header,$creds,$footer));
+    Log::info('paid.pipeline.done', ['order_id'=>$this->orderId]);
   }
 }

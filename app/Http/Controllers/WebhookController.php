@@ -76,7 +76,9 @@ class WebhookController extends Controller
             $incomingAppStatus = $this->normalizeIncoming((string)($payload['transaction_status'] ?? ''));
             $providerRef       = isset($payload['transaction_id']) ? (string)$payload['transaction_id'] : null;
 
-            DB::transaction(function () use ($orderId, $payload, $incomingAppStatus, $providerRef) {
+            $becamePaid = false;
+
+            DB::transaction(function () use ($orderId, $payload, $incomingAppStatus, $providerRef, &$becamePaid) {
                 // lock row agar konsisten
                 $p = Payment::where('order_id', $orderId)->lockForUpdate()->first();
 
@@ -104,6 +106,7 @@ class WebhookController extends Controller
                 }
 
                 $clientId = OrderId::client($orderId) ?: 'DEFAULT';
+                $becamePaid = ($prevStatus !== 'PAID' && $finalStatus === 'PAID');
 
                 Payment::updateOrCreate(
                     ['order_id' => $orderId],
@@ -121,15 +124,10 @@ class WebhookController extends Controller
                 );
             });
 
-            // Post-commit: provision kalau sudah PAID (tanpa bikin gagal webhook)
-            $p = Payment::where('order_id', $orderId)->first();
-            if ($p && $p->status === 'PAID') {
-                try {
-                    $u = $prov->provision($orderId);
-                    if ($u) $prov->queuePushToMikrotik($u);
-                } catch (\Throwable $e) {
-                    Log::error('Provision after webhook gagal', ['order_id'=>$orderId, 'err'=>$e->getMessage()]);
-                }
+            /// sesudah commit:
+            if (!empty($becamePaid)) {
+                // Satu-satunya trigger: delegasikan ke satu job orkestra
+                \App\Jobs\PaymentBecamePaid::dispatch($orderId)->onQueue('router');
             }
 
             // WAJIB 200 agar Midtrans tidak retry

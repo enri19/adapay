@@ -3,31 +3,26 @@
 
 @push('head')
 <style>
-/* ===== Smart Loader (polished) ===== */
+/* ===== Smart Loader ===== */
 #smart-loader{
-  position:fixed; inset:0; z-index:9999;
-  display:flex; align-items:center; justify-content:center;
-  background:linear-gradient(135deg, rgba(15,23,42,.65), rgba(2,6,23,.65));
+  position:fixed; inset:0; z-index:60; display:none;
+  align-items:center; justify-content:center;
+  background:linear-gradient(135deg, rgba(15,23,42,.7), rgba(2,6,23,.7));
   backdrop-filter: blur(6px) saturate(120%);
-  /* smoother show/hide tanpa FOUC */
-  opacity:0; visibility:hidden; pointer-events:none; transition:opacity .18s ease, visibility .18s ease;
 }
-#smart-loader.is-visible{ opacity:1; visibility:visible; pointer-events:auto; }
-
+#smart-loader.is-visible{ display:flex; }
 .loader-card{
   width:min(560px, 92vw);
-  background:rgba(255,255,255,.92);
+  background:rgba(255,255,255,.94);
   border:1px solid rgba(0,0,0,.08);
   border-radius:16px;
-  box-shadow: 0 22px 65px rgba(0,0,0,.28);
+  box-shadow: 0 20px 65px rgba(0,0,0,.25);
   overflow:hidden;
-  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
 }
-
 .loader-head{
-  padding:16px 18px 12px; display:flex; align-items:center; gap:12px;
+  padding:18px 18px 14px; display:flex; align-items:center; gap:12px;
   border-bottom:1px solid rgba(0,0,0,.06);
-  background:linear-gradient(180deg, rgba(255,255,255,1), rgba(255,255,255,.75));
+  background:linear-gradient(180deg, rgba(255,255,255,1), rgba(255,255,255,.7));
 }
 .spin{
   width:26px;height:26px;border-radius:999px; border:3px solid rgba(0,0,0,.18); border-top-color:#2563eb;
@@ -36,10 +31,7 @@
 @keyframes spin{to{transform:rotate(360deg)}}
 .loader-title{ font-weight:700; font-size:1rem; color:#0f172a; }
 .loader-sub{ font-size:.85rem; color:#475569; }
-.mono, code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
-
-.loader-body{ padding:14px 18px 16px; }
-
+.loader-body{ padding:16px 18px 18px; }
 .steps{ list-style:none; margin:0; padding:0; display:grid; gap:10px; }
 .step{
   display:grid; grid-template-columns: 24px 1fr; gap:10px; align-items:flex-start;
@@ -50,18 +42,15 @@
   background:#e5e7eb; display:flex;align-items:center;justify-content:center;
   font-size:12px; color:#fff;
 }
-.step .txt{ line-height:1.15; color:#0f172a; font-weight:600; }
+.step .txt{ line-height:1.2; color:#0f172a; font-weight:600; }
 .step .help{ color:#64748b; font-size:.82rem; margin-top:2px; }
-
 .step.is-active{ border-color:#93c5fd; background:linear-gradient(180deg,#fff,#f8fbff); }
 .step.is-active .dot{ background:#2563eb; box-shadow:0 0 0 4px rgba(37,99,235,.12); }
-.step.is-done  { opacity:.85; }
+.step.is-done{ opacity:.85; }
 .step.is-done .dot{ background:#10b981; }
 .step.is-done .dot::before{ content:'✓'; font-weight:700; transform:translateY(-1px); }
 
-.progress{
-  height:6px; border-radius:999px; background:#e5e7eb; overflow:hidden; margin-top:12px;
-}
+.progress{ height:6px; border-radius:999px; background:#e5e7eb; overflow:hidden; margin-top:12px; }
 .progress > i{ display:block; height:100%; width:0%; background:linear-gradient(90deg,#60a5fa,#2563eb); transition:width .3s ease; }
 
 .loader-foot{
@@ -83,6 +72,9 @@
   .loader-body{ padding:12px 14px 14px; }
   .loader-foot{ padding:10px 14px; }
 }
+.code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+.ic{ width:18px; height:18px; }
+.hidden{ display:none; }
 </style>
 @endpush
 
@@ -93,18 +85,15 @@
   @if(!$orderId)
     <div class="text-sm text-red-600">Order ID tidak ditemukan.</div>
   @else
-    <p class="text-sm mb-4">Order ID: <strong>{{ $orderId }}</strong></p>
+    <p class="text-sm mb-4">Order ID: <strong class="code">{{ $orderId }}</strong></p>
 
     @php
-      // --- tentukan mode: pakai $authMode jika disediakan controller, fallback deteksi (u==p) ---
-      $authMode = isset($authMode) ? strtolower((string)$authMode) : null;   // 'code' | 'userpass' | null
+      $authMode = isset($authMode) ? strtolower((string)$authMode) : null; // 'code'|'userpass'|null
       $u = is_array($creds ?? null) ? ($creds['u'] ?? null) : null;
       $p = is_array($creds ?? null) ? ($creds['p'] ?? null) : null;
       $infer = ($u && $p && strtoupper($u) === strtoupper($p)) ? 'code' : 'userpass';
       $mode = in_array($authMode, ['code','userpass'], true) ? $authMode : $infer;
-      $portalUrl = $hotspotPortal
-        ?? (isset($client) && $client ? ($client->hotspot_portal ?? null) : null)
-        ?? config('hotspot.portal_default');
+      $portalUrl = $hotspotPortal ?? config('hotspot.portal_default');
     @endphp
 
     @if($status === 'PAID')
@@ -119,8 +108,7 @@
           @if($mode === 'code')
             <p class="flex items-center gap-2">
               <span>Kode Voucher:</span>
-              <code id="cred-code">{{ strtoupper($creds['u']) }}</code>
-              <!-- tombol copy -->
+              <code id="cred-code" class="code">{{ strtoupper($creds['u']) }}</code>
               <button type="button" class="copy-btn js-copy" data-copy="cred-code" aria-label="Salin kode">
                 <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -132,12 +120,12 @@
               </button>
             </p>
             <p class="text-xs text-gray-600 mt-1">
-              Gunakan <strong>kode yang sama</strong> untuk kolom <em>Username</em> & <em>Password</em>, atau isi di kolom <em>Voucher</em> jika halaman login 1-kolom.
+              Gunakan <strong>kode yang sama</strong> untuk kolom <em>Username</em> & <em>Password</em>.
             </p>
           @else
             <p class="flex items-center gap-2">
               <span>Username:</span>
-              <code id="cred-user">{{ strtoupper($creds['u']) }}</code>
+              <code id="cred-user" class="code">{{ strtoupper($creds['u']) }}</code>
               <button type="button" class="copy-btn js-copy" data-copy="cred-user" aria-label="Salin username">
                 <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -150,7 +138,7 @@
             </p>
             <p class="flex items-center gap-2">
               <span>Password:</span>
-              <code id="cred-pass">{{ strtoupper($creds['p']) }}</code>
+              <code id="cred-pass" class="code">{{ strtoupper($creds['p']) }}</code>
               <button type="button" class="copy-btn js-copy" data-copy="cred-pass" aria-label="Salin password">
                 <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -164,20 +152,16 @@
           @endif
         </div>
 
-        {{-- Tombol ke halaman login hotspot --}}
         @if(!empty($portalUrl))
           <div class="mt-4">
-            <a href="{{ $portalUrl }}"
-               target="_blank" rel="noopener"
+            <a href="{{ $portalUrl }}" target="_blank" rel="noopener"
                class="inline-flex items-center gap-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 px-3 py-2 text-sm font-medium">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M15 3h6v6"></path>
-                <path d="M10 14 21 3"></path>
-                <path d="M21 14v7H3V3h7"></path>
+                <path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M21 14v7H3V3h7"></path>
               </svg>
               Buka Halaman Login Hotspot
             </a>
-            <p class="mt-1 text-xs text-gray-500">Pastikan perangkat sudah tersambung ke Wi-Fi hotspot agar portal bisa diakses.</p>
+            <p class="mt-1 text-xs text-gray-500">Pastikan perangkat sudah tersambung ke Wi-Fi hotspot.</p>
           </div>
         @endif
 
@@ -202,13 +186,14 @@
 </div>
 
 {{-- SMART LOADER OVERLAY --}}
+@if($orderId)
 <div id="smart-loader" aria-live="polite" aria-busy="true">
   <div class="loader-card">
     <div class="loader-head">
       <div class="spin" aria-hidden="true"></div>
       <div>
         <div class="loader-title">Memproses pembayaran & menyiapkan akun…</div>
-        <div class="loader-sub">Order ID: <span class="mono">{{ $orderId }}</span></div>
+        <div class="loader-sub">Order ID: <span class="code">{{ $orderId }}</span></div>
       </div>
     </div>
 
@@ -218,17 +203,24 @@
           <div class="dot" aria-hidden="true"></div>
           <div>
             <div class="txt">Cek status pembayaran</div>
-            <div class="help">Sinkron dengan Midtrans</div>
+            <div class="help">Sinkron dengan Midtrans/Webhook</div>
           </div>
         </li>
         <li class="step" data-step="2">
           <div class="dot" aria-hidden="true"></div>
           <div>
             <div class="txt">Siapkan akun hotspot</div>
-            <div class="help">Buat kredensial & dorong ke router</div>
+            <div class="help">Buat kredensial</div>
           </div>
         </li>
         <li class="step" data-step="3">
+          <div class="dot" aria-hidden="true"></div>
+          <div>
+            <div class="txt">Dorong ke router</div>
+            <div class="help">Provision Mikrotik</div>
+          </div>
+        </li>
+        <li class="step" data-step="4">
           <div class="dot" aria-hidden="true"></div>
           <div>
             <div class="txt">Kirim WhatsApp</div>
@@ -251,11 +243,18 @@
     </div>
   </div>
 </div>
+<noscript>
+  <div style="position:fixed;left:0;right:0;bottom:0;background:#fee2e2;color:#7f1d1d;padding:.6rem 1rem;text-align:center;font-size:.9rem">
+    Aktifkan JavaScript untuk melihat progres otomatis.
+  </div>
+</noscript>
+@endif
 @endsection
 
 @push('scripts')
 <script>
 (function(){
+  // --- Copy helpers ---
   function copyTextById(id){
     var el = document.getElementById(id);
     if (!el) throw new Error('Target not found');
@@ -264,19 +263,16 @@
     if (navigator.clipboard && navigator.clipboard.writeText) {
       return navigator.clipboard.writeText(text);
     }
-    // fallback (execCommand)
     var ta = document.createElement('textarea');
     ta.value = text; document.body.appendChild(ta);
     ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
     return Promise.resolve();
   }
-
   document.addEventListener('click', function(e){
     var btn = e.target.closest('.js-copy');
     if (!btn) return;
     var target = btn.getAttribute('data-copy');
     if (!target) return;
-
     btn.setAttribute('disabled','disabled');
     copyTextById(target)
       .then(function(){
@@ -293,92 +289,75 @@
         alert('Gagal menyalin.');
       });
   });
-})();
-</script>
-@endpush
 
-@push('scripts')
-<script>
-(function(){
-  // ------ data dari server ------
-  var ORDER_ID = @json($orderId);
-  var CURRENT_STATUS = String(@json($status ?? '')).toUpperCase(); // normalisasi
-  var HAS_CREDS = Boolean(@json((bool) $creds));
+  // --- Smart loader ---
+  const ORDER_ID = @json($orderId);
+  const CURRENT_STATUS = @json($status);
+  const HAS_CREDS = Boolean(@json((bool) $creds));
+  const LOADER = document.getElementById('smart-loader');
+  const PROG = LOADER?.querySelector('.progress > i');
+  const STEPS = LOADER?.querySelectorAll('.step');
+  const ELAPSED = document.getElementById('elapsed');
+  const BTN_REFRESH = document.getElementById('btn-refresh');
 
-  // ------ dom refs (tanpa optional chaining) ------
-  var LOADER = document.getElementById('smart-loader');
-  var PROG = LOADER ? LOADER.querySelector('.progress > i') : null;
-  var PROG_WR = PROG ? PROG.parentElement : null;
-  var STEPS = LOADER ? LOADER.querySelectorAll('.step') : [];
-  var ELAPSED = document.getElementById('elapsed');
-  var BTN_REFRESH = document.getElementById('btn-refresh');
-
-  // Tunjukkan loader jika PENDING atau PAID tapi belum ada kredensial
   function shouldShowLoader(){
-    return (CURRENT_STATUS === 'PENDING') || (CURRENT_STATUS === 'PAID' && !HAS_CREDS);
+    return !!ORDER_ID && ((CURRENT_STATUS === 'PENDING') || (CURRENT_STATUS === 'PAID' && !HAS_CREDS));
   }
 
-  // UI helpers
-  function setStepState(activeIndex){ // 1..3
-    if (!STEPS || !STEPS.length) return;
-    for (var i=0;i<STEPS.length;i++){
-      var li = STEPS[i];
-      var pos = i+1;
-      li.classList.remove('is-active'); li.classList.remove('is-done');
-      if (pos < activeIndex) li.classList.add('is-done');
-      else if (pos === activeIndex) li.classList.add('is-active');
-    }
-    var pct = Math.min(100, Math.max(0, (activeIndex-1) * 50)); // 0,50,100 untuk 3 step
-    if (PROG){ PROG.style.width = pct + '%'; }
-    if (PROG_WR){ PROG_WR.setAttribute('aria-valuenow', pct); }
+  function setStepState(activeIndex){ // 1..4
+    if (!STEPS) return;
+    STEPS.forEach((li, idx) => {
+      const i = idx + 1;
+      li.classList.remove('is-active','is-done');
+      if (i < activeIndex) li.classList.add('is-done');
+      else if (i === activeIndex) li.classList.add('is-active');
+    });
+    const pct = Math.min(100, Math.max(0, (activeIndex - 1) * 33)); // ~0,33,66,99
+    if (PROG){ PROG.style.width = pct + '%'; PROG.parentElement?.setAttribute('aria-valuenow', pct); }
   }
 
-  var t0 = Date.now(), tickTmr = null, pollTmr = null;
+  let t0 = Date.now(), tickTmr = null, pollTmr = null;
   function startElapsed(){
     if (!ELAPSED) return;
-    tickTmr = setInterval(function(){
-      var s = Math.floor((Date.now()-t0)/1000);
+    tickTmr = setInterval(()=>{
+      const s = Math.floor((Date.now()-t0)/1000);
       ELAPSED.textContent = s + 's';
     }, 1000);
   }
 
-  // Poll status pembayaran → /payments/{orderId} (controller PaymentController@show)
-  var interval = 2000, hardStopMs = 120000; // 2 menit
-  function poll(){
-    fetch('/payments/' + encodeURIComponent(ORDER_ID), { headers: { 'Accept':'application/json' }, credentials: 'same-origin' })
-      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-      .then(function(data){
-        var status = String(data.status || '').toUpperCase();
+  function hideLoader(){
+    if (pollTmr) clearTimeout(pollTmr);
+    if (tickTmr) clearInterval(tickTmr);
+    LOADER?.classList.remove('is-visible');
+  }
 
+  // Poll /payments/{orderId} → hanya butuh status
+  let interval = 2000, hardStopMs = 120000; // 2 menit
+  function poll(){
+    fetch('/payments/' + encodeURIComponent(ORDER_ID), {headers:{'Accept':'application/json'}})
+      .then(r=>r.ok ? r.json() : Promise.reject(new Error('HTTP '+r.status)))
+      .then(data=>{
+        const status = (data.status || '').toUpperCase();
         if (status === 'PENDING'){
           setStepState(1);
         } else if (status === 'PAID'){
-          // Saat sudah PAID: anggap sedang provision/push → step 2
+          // begitu sudah PAID, anggap step 2/3/4 sedang berjalan di background
           setStepState(2);
-          // Kalau halaman ini belum punya kredensial, reload ringan agar controller render creds
-          if (!HAS_CREDS){
-            setTimeout(function(){ location.reload(); }, 1200);
-          } else {
-            // Kalau sudah punya kredensial, finalisasi → step 3 & hide
-            setStepState(3);
-            hideLoader();
-          }
+          // reload ringan untuk ambil kredensial kalau sudah dibuat
+          setTimeout(()=> location.reload(), 1200);
         } else {
-          // FAILED/CANCEL/EXPIRE/UNKNOWN → tutup loader (biar user lihat status di halaman)
+          // FAILED/CANCEL/EXPIRE dll → tutup loader
           hideLoader();
         }
       })
-      .catch(function(){
-        // diamkan error jaringan sesaat
-      })
-      .finally(function(){
-        if (!isVisible(LOADER)) return;
+      .catch(()=>{/* ignore sementara */})
+      .finally(()=>{
+        if (!LOADER?.classList.contains('is-visible')) return;
         if ((Date.now()-t0) > hardStopMs){ hideLoader(); return; }
         pollTmr = setTimeout(poll, interval);
       });
   }
 
-  function isVisible(el){ return el && el.classList.contains('is-visible'); }
   function showLoader(){
     if (!LOADER) return;
     LOADER.classList.add('is-visible');
@@ -386,18 +365,9 @@
     startElapsed();
     poll();
   }
-  function hideLoader(){
-    if (!LOADER) return;
-    LOADER.classList.remove('is-visible');
-    if (pollTmr) clearTimeout(pollTmr);
-    if (tickTmr) clearInterval(tickTmr);
-  }
 
-  if (ORDER_ID && shouldShowLoader()) showLoader();
-
-  if (BTN_REFRESH){
-    BTN_REFRESH.addEventListener('click', function(){ location.reload(); });
-  }
+  if (shouldShowLoader()) showLoader();
+  BTN_REFRESH?.addEventListener('click', ()=> location.reload());
 })();
 </script>
 @endpush
