@@ -1,6 +1,89 @@
 @extends('layouts.app')
 @section('title', 'Status Pembayaran')
 
+@push('head')
+<style>
+/* ===== Smart Loader ===== */
+#smart-loader{
+  position:fixed; inset:0; z-index:60; display:none;
+  align-items:center; justify-content:center;
+  background:linear-gradient(135deg, rgba(15,23,42,.7), rgba(2,6,23,.7));
+  backdrop-filter: blur(6px) saturate(120%);
+}
+#smart-loader.is-visible{ display:flex; }
+
+.loader-card{
+  width:min(560px, 92vw);
+  background:rgba(255,255,255,.9);
+  border:1px solid rgba(0,0,0,.08);
+  border-radius:16px;
+  box-shadow: 0 20px 65px rgba(0,0,0,.25);
+  overflow:hidden;
+}
+
+.loader-head{
+  padding:18px 18px 14px; display:flex; align-items:center; gap:12px;
+  border-bottom:1px solid rgba(0,0,0,.06);
+  background:linear-gradient(180deg, rgba(255,255,255,1), rgba(255,255,255,.7));
+}
+.spin{
+  width:26px;height:26px;border-radius:999px; border:3px solid rgba(0,0,0,.18); border-top-color:#2563eb;
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader-title{ font-weight:700; font-size:1rem; color:#0f172a; }
+.loader-sub{ font-size:.85rem; color:#475569; }
+
+.loader-body{ padding:16px 18px 18px; }
+
+.steps{ list-style:none; margin:0; padding:0; display:grid; gap:10px; }
+.step{
+  display:grid; grid-template-columns: 24px 1fr; gap:10px; align-items:flex-start;
+  padding:10px 12px; border-radius:12px; background:#fff; border:1px solid rgba(0,0,0,.06);
+}
+.step .dot{
+  width:20px;height:20px;border-radius:50%;
+  background:#e5e7eb; display:flex;align-items:center;justify-content:center;
+  font-size:12px; color:#fff;
+}
+.step .txt{ line-height:1.2; color:#0f172a; font-weight:600; }
+.step .help{ color:#64748b; font-size:.82rem; margin-top:2px; }
+
+.step.is-active{ border-color:#93c5fd; background:linear-gradient(180deg,#fff,#f8fbff); }
+.step.is-active .dot{ background:#2563eb; box-shadow:0 0 0 4px rgba(37,99,235,.12); }
+.step.is-done  { opacity:.8; }
+.step.is-done .dot{ background:#10b981; }
+.step.is-done .dot::before{
+  content:'✓'; font-weight:700; transform:translateY(-1px);
+}
+
+.progress{
+  height:6px; border-radius:999px; background:#e5e7eb; overflow:hidden; margin-top:12px;
+}
+.progress > i{ display:block; height:100%; width:0%; background:linear-gradient(90deg,#60a5fa,#2563eb); transition:width .3s ease; }
+
+.loader-foot{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:12px 18px 14px; border-top:1px solid rgba(0,0,0,.06); background:#fafafa;
+  font-size:.85rem; color:#475569;
+}
+.loader-foot .muted{ opacity:.8; }
+.loader-foot .actions{ display:flex; gap:8px; }
+.btn-min{
+  padding:6px 10px; border-radius:10px; background:#111827; color:#fff; font-weight:600; font-size:.8rem;
+}
+.btn-ghost{
+  padding:6px 10px; border-radius:10px; background:#fff; border:1px solid #e5e7eb; color:#111827; font-weight:600; font-size:.8rem;
+}
+@media (max-width: 420px){
+  .loader-title{ font-size:.95rem; }
+  .loader-head{ padding:14px 14px 10px; }
+  .loader-body{ padding:12px 14px 14px; }
+  .loader-foot{ padding:10px 14px; }
+}
+</style>
+@endpush
+
 @section('content')
 <div class="max-w-xl mx-auto p-4">
   <h1 class="text-2xl font-semibold mb-3">Status Pembayaran</h1>
@@ -98,14 +181,12 @@
 
       @else
         <div class="text-sm">Menyiapkan akun hotspot…</div>
-        <script>setTimeout(()=>location.reload(),1500)</script>
       @endif
 
     @elseif($status === 'PENDING')
       <div class="rounded border border-yellow-200 bg-yellow-50 p-3 mb-4">
         Menunggu pembayaran…
       </div>
-      <script>setTimeout(()=>location.reload(),1500)</script>
     @else
       <div class="rounded border p-3 mb-4">Status: {{ $status }}</div>
     @endif
@@ -116,6 +197,57 @@
       </a>
     </div>
   @endif
+</div>
+
+{{-- SMART LOADER OVERLAY --}}
+<div id="smart-loader" aria-live="polite" aria-busy="true">
+  <div class="loader-card">
+    <div class="loader-head">
+      <div class="spin" aria-hidden="true"></div>
+      <div>
+        <div class="loader-title">Memproses pembayaran & menyiapkan akun…</div>
+        <div class="loader-sub">Order ID: <span class="mono">{{ $orderId }}</span></div>
+      </div>
+    </div>
+
+    <div class="loader-body">
+      <ul class="steps">
+        <li class="step" data-step="1">
+          <div class="dot" aria-hidden="true"></div>
+          <div>
+            <div class="txt">Cek status pembayaran</div>
+            <div class="help">Sinkron dengan Midtrans</div>
+          </div>
+        </li>
+        <li class="step" data-step="2">
+          <div class="dot" aria-hidden="true"></div>
+          <div>
+            <div class="txt">Siapkan akun hotspot</div>
+            <div class="help">Buat kredensial & dorong ke router</div>
+          </div>
+        </li>
+        <li class="step" data-step="3">
+          <div class="dot" aria-hidden="true"></div>
+          <div>
+            <div class="txt">Kirim WhatsApp</div>
+            <div class="help">Kredensial dikirim ke nomor kamu</div>
+          </div>
+        </li>
+      </ul>
+
+      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <i style="width:0%"></i>
+      </div>
+    </div>
+
+    <div class="loader-foot">
+      <div class="muted"><span id="elapsed">0s</span> berlalu</div>
+      <div class="actions">
+        <button type="button" class="btn-ghost" id="btn-refresh">Refresh</button>
+        <a href="{{ route('hotspot.order', ['orderId'=>$orderId]) }}" class="btn-min">Halaman Order</a>
+      </div>
+    </div>
+  </div>
 </div>
 @endsection
 
@@ -159,6 +291,102 @@
         alert('Gagal menyalin.');
       });
   });
+})();
+</script>
+@endpush
+
+@push('scripts')
+<script>
+(function(){
+  const ORDER_ID = @json($orderId);
+  const CURRENT_STATUS = @json($status);
+  const HAS_CREDS = Boolean(@json((bool) $creds));
+  const LOADER = document.getElementById('smart-loader');
+  const PROG = LOADER?.querySelector('.progress > i');
+  const STEPS = LOADER?.querySelectorAll('.step');
+  const ELAPSED = document.getElementById('elapsed');
+  const BTN_REFRESH = document.getElementById('btn-refresh');
+
+  // tampilkan loader kalau:
+  // - status PENDING, atau
+  // - status PAID tapi kredensial belum tersedia
+  const shouldShowLoader = () => (CURRENT_STATUS === 'PENDING') || (CURRENT_STATUS === 'PAID' && !HAS_CREDS);
+
+  // helper UI
+  function setStepState(activeIndex){ // 1..3
+    if (!STEPS) return;
+    STEPS.forEach((li, idx) => {
+      const i = idx+1;
+      li.classList.remove('is-active','is-done');
+      if (i < activeIndex) li.classList.add('is-done');
+      else if (i === activeIndex) li.classList.add('is-active');
+    });
+    const pct = Math.min(100, Math.max(0, (activeIndex-1) * 50)); // 0, 50, 100
+    if (PROG){ PROG.style.width = pct + '%'; PROG.parentElement?.setAttribute('aria-valuenow', pct); }
+  }
+
+  // elapsed timer
+  let t0 = Date.now(), tickTmr = null;
+  function startElapsed(){
+    if (!ELAPSED) return;
+    tickTmr = setInterval(()=>{
+      const s = Math.floor((Date.now()-t0)/1000);
+      ELAPSED.textContent = s + 's';
+    }, 1000);
+  }
+
+  // polling status payment JSON: GET /payments/{orderId}
+  let pollTmr = null, interval = 2000, hardStopMs = 120000; // 2 menit batas keras
+  function poll(){
+    fetch('/payments/' + encodeURIComponent(ORDER_ID), {headers:{'Accept':'application/json'}})
+      .then(r=>r.ok ? r.json() : Promise.reject(new Error('HTTP '+r.status)))
+      .then(data=>{
+        const status = (data.status || '').toUpperCase();
+        if (status === 'PENDING'){
+          setStepState(1);
+        } else if (status === 'PAID'){
+          setStepState(2);
+          // kalau halaman ini belum punya kredensial, coba soft-refresh supaya controller generate & tampilkan
+          if (!HAS_CREDS){
+            // beri jeda dikit agar provision job selesai membuat HotspotUser
+            setTimeout(()=> location.reload(), 1200);
+          } else {
+            // sudah ada creds → kita sembunyikan loader
+            hideLoader();
+          }
+        } else if (status === 'FAILED' || status === 'CANCEL' || status === 'EXPIRE'){
+          // stop polling, tampilkan informasi dari server (halaman sudah menampilkan status)
+          hideLoader();
+        } else {
+          // status lain, keep polling
+          setStepState(1);
+        }
+      })
+      .catch(()=>{ /* diamkan; mungkin transien */ })
+      .finally(()=>{
+        if (!LOADER?.classList.contains('is-visible')) return;
+        if ((Date.now()-t0) > hardStopMs){ hideLoader(); return; }
+        pollTmr = setTimeout(poll, interval);
+      });
+  }
+
+  function showLoader(){
+    if (!LOADER) return;
+    LOADER.classList.add('is-visible');
+    setStepState(CURRENT_STATUS === 'PENDING' ? 1 : 2);
+    startElapsed();
+    poll();
+  }
+  function hideLoader(){
+    if (!LOADER) return;
+    LOADER.classList.remove('is-visible');
+    if (pollTmr) clearTimeout(pollTmr);
+    if (tickTmr) clearInterval(tickTmr);
+  }
+
+  if (shouldShowLoader()) showLoader();
+
+  BTN_REFRESH?.addEventListener('click', ()=> location.reload());
 })();
 </script>
 @endpush
