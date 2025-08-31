@@ -9,22 +9,35 @@
   .kpi .value{font-weight:800;font-size:1.4rem;margin-top:4px}
   .kpi .sub{font-size:.8rem;color:var(--mut)}
 
-  .tabs{display:flex;gap:8px;margin-top:12px}
-  .tab-btn{appearance:none;border:1px solid var(--bd);background:var(--card);padding:8px 12px;border-radius:.5rem;cursor:pointer;font-weight:600}
-  .tab-btn[aria-selected="true"]{outline:2px solid #6366f1; border-color:#6366f1}
-  .tab-panels{margin-top:10px}
-  .tab-panel{display:none}
-  .tab-panel.active{display:block}
+  /* ⬇️ Mini bars: bottom-aligned */
+  .mini-bars{
+    display:flex;                /* pakai flex agar baseline gampang dikunci di bawah */
+    align-items:flex-end;        /* semua batang nempel ke bawah */
+    gap:6px;
+    height:72px;                 /* tinggi area grafik */
+    padding:0 2px;               /* sedikit ruang sisi */
+    overflow:hidden;
+  }
+  .mini-bars > div{
+    position:relative;
+    flex:1 0 0;                  /* tiap kolom lebar sama, tidak wrap */
+    display:flex;
+    align-items:flex-end;        /* isi kolom juga nempel bawah */
+  }
+  .mini-bars .bar{
+    width:100%;
+    background:#e5edff;
+    border-radius:6px;
+  }
+  .mini-bars .bar.is-sum{
+    background:#d1fae5;
+    position:absolute;
+    left:3px; right:3px; bottom:0; opacity:.9; border-radius:6px;
+  }
 
-  .grid-2{display:grid;gap:12px}
-  @media(min-width:768px){ .grid-2{grid-template-columns:1fr 1fr} }
-
-  .mini-bars{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px;align-items:end;height:72px}
-  .mini-bars .bar{background:#e5edff;border-radius:6px}
-  .mini-bars .bar.is-sum{background:#d1fae5}
   .section-title{font-weight:700;margin-bottom:8px}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
-  .table-wrap{overflow:auto}
+  @media(max-width:900px){ .kpis{grid-template-columns:1fr 1fr} }
 </style>
 @endpush
 
@@ -256,7 +269,7 @@
           <th>Status</th>
         </tr>
       </thead>
-      
+
       <tbody>
       @forelse($recentPayments as $p)
         @php
