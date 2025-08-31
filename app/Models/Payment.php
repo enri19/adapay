@@ -42,4 +42,18 @@ class Payment extends Model
     $inc = $rank[$incoming] ?? -1;
     return $inc >= $cur ? $incoming : $current;
   }
+
+  public function getAdminFeeAttribute(): int
+  {
+    $gross = (int) ($this->amount ?? 0);
+    if ($gross <= 0) return 0;
+
+    return \App\Support\AdminFee::forClient($this->client_id);
+  }
+
+  public function getNetForClientAttribute(): int
+  {
+    $gross = (int) ($this->amount ?? 0);
+    return \App\Support\AdminFee::netForClient($gross, $this->client_id);
+  }
 }

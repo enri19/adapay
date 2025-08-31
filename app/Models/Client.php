@@ -12,7 +12,8 @@ class Client extends Model
         'enable_push'    => 'boolean',
         'is_active'      => 'boolean',
         'router_port'    => 'integer',
-        'hotspot_portal' => 'string', // cast baru
+        'hotspot_portal' => 'string',
+        'admin_fee_flat' => 'integer',
     ];
 
     // Mutator Laravel 8: trim & "" -> null
