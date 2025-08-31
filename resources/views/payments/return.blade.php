@@ -248,7 +248,7 @@
 @push('scripts')
 <script>
 (function(){
-  // --- Copy helpers ---
+  // --- Copy helpers (tetap) ---
   function copyTextById(id){
     var el = document.getElementById(id);
     if (!el) throw new Error('Target not found');
@@ -284,15 +284,27 @@
       });
   });
 
-  // --- Smart loader ---
+  // --- Smart loader dengan grace time ---
   const ORDER_ID = @json($orderId);
   const CURRENT_STATUS = @json($status);
   const HAS_CREDS = Boolean(@json((bool) $creds));
+
   const LOADER = document.getElementById('smart-loader');
   const PROG = LOADER?.querySelector('.progress > i');
   const STEPS = LOADER?.querySelectorAll('.step');
   const ELAPSED = document.getElementById('elapsed');
   const BTN_REFRESH = document.getElementById('btn-refresh');
+
+  // Konfigurasi: atur sesuai selera
+  const MIN_VISIBLE_MS = 1200;  // minimal loader tampil sejak show()
+  const PAID_GRACE_MS  = 1400;  // tambahan delay setelah pertama kali PAID
+  const POLL_INTERVAL  = 2000;  // ms
+  const HARD_STOP_MS   = 120000;
+
+  // Helper untuk kompatibel dengan kode lama
+  function shouldShowLoader(){
+    return !!ORDER_ID && ((CURRENT_STATUS === 'PENDING') || (CURRENT_STATUS === 'PAID' && !HAS_CREDS));
+  }
 
   function setStepState(activeIndex){ // 1..4
     if (!STEPS) return;
@@ -307,12 +319,21 @@
   }
 
   let t0 = Date.now(), tickTmr = null, pollTmr = null;
+  let paidSeen = false, reloadScheduled = false;
+
   function startElapsed(){
     if (!ELAPSED) return;
+    t0 = Date.now();
     tickTmr = setInterval(()=>{
       const s = Math.floor((Date.now()-t0)/1000);
       ELAPSED.textContent = s + 's';
     }, 1000);
+  }
+
+  function scheduleReload(ms){
+    if (reloadScheduled) return;
+    reloadScheduled = true;
+    setTimeout(()=>{ location.reload(); }, ms);
   }
 
   function hideLoader(){
@@ -321,53 +342,49 @@
     LOADER?.classList.remove('is-visible');
   }
 
-  // Poll /payments/{orderId} → hanya butuh status
-  let interval = 2000, hardStopMs = 120000; // 2 menit
   function poll(){
     fetch('/api/payments/' + encodeURIComponent(ORDER_ID), {headers:{'Accept':'application/json'}})
       .then(r=>r.ok ? r.json() : Promise.reject(new Error('HTTP '+r.status)))
       .then(data=>{
-        const status = (data.status || '').toUpperCase();
+        const status = String(data.status || '').toUpperCase();
+
         if (status === 'PENDING'){
           setStepState(1);
         } else if (status === 'PAID'){
-          // begitu sudah PAID, anggap step 2/3/4 sedang berjalan di background
+          // Tampilkan urutan step cepat agar terlihat "finalizing"
           setStepState(2);
-          // reload ringan untuk ambil kredensial kalau sudah dibuat
-          setTimeout(()=> location.reload(), 1200);
+          if (!paidSeen){
+            paidSeen = true;
+            setTimeout(()=>setStepState(3), 300);
+            setTimeout(()=>setStepState(4), 700);
+
+            // Pastikan loader tampil MIN_VISIBLE_MS + PAID_GRACE_MS sebelum reload
+            const elapsed = Date.now() - t0;
+            const wait = Math.max(0, MIN_VISIBLE_MS - elapsed) + PAID_GRACE_MS;
+            scheduleReload(wait);
+          }
         } else {
-          // FAILED/CANCEL/EXPIRE dll → tutup loader
+          // FAILED/CANCEL/EXPIRE/etc
           hideLoader();
         }
       })
       .catch(()=>{/* ignore sementara */})
       .finally(()=>{
         if (!LOADER?.classList.contains('is-visible')) return;
-        if ((Date.now()-t0) > hardStopMs){ hideLoader(); return; }
-        pollTmr = setTimeout(poll, interval);
+        if ((Date.now()-t0) > HARD_STOP_MS){ hideLoader(); return; }
+        pollTmr = setTimeout(poll, POLL_INTERVAL);
       });
   }
 
   function showLoader(){
     if (!LOADER) return;
-    // kalau sudah visible dari server, jangan toggle lagi
     LOADER.classList.add('is-visible');
-    // kalau server belum preset, set dari JS (fallback)
-    const anyActive = LOADER.querySelector('.step.is-active, .step.is-done');
-    if (!anyActive){
-      setStepState(CURRENT_STATUS === 'PENDING' ? 1 : 2);
-    }
+    setStepState(CURRENT_STATUS === 'PENDING' ? 1 : 2);
     startElapsed();
-    poll();
+    poll(); // jalanin polling segera
   }
 
-  // start: kalau server sudah visible → langsung start timer & polling
-  if (LOADER?.classList.contains('is-visible')) {
-    showLoader();
-  } else if ( (CURRENT_STATUS === 'PENDING') || (CURRENT_STATUS === 'PAID' && !HAS_CREDS) ) {
-    showLoader();
-  }
-
+  if (shouldShowLoader()) showLoader();
   BTN_REFRESH?.addEventListener('click', ()=> location.reload());
 })();
 </script>
