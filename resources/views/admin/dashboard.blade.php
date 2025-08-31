@@ -250,28 +250,42 @@
           <th>Waktu</th>
           <th>Order</th>
           <th>Client</th>
-          <th>Jumlah</th>
+          <th>Gross</th>
+          <th>Admin Fee</th>
+          <th>Net (Diterima)</th>
           <th>Status</th>
         </tr>
       </thead>
+      
       <tbody>
-        @forelse($recentPayments as $p)
-          @php $ps = strtoupper($p->status ?: ''); @endphp
-          <tr>
-            <td>{{ optional($p->created_at)->timezone(config('app.timezone'))->format('Y-m-d H:i:s') }}</td>
-            <td class="mono">{{ $p->order_id }}</td>
-            <td class="mono">{{ $p->client_id ?: 'DEFAULT' }}</td>
-            <td>Rp{{ number_format((int)$p->amount,0,',','.') }}</td>
-            <td>
-              @if($ps==='PAID') <span class="pill pill--ok">PAID</span>
-              @elseif($ps==='PENDING') <span class="pill">PENDING</span>
-              @else <span class="pill pill--off">{{ $ps ?: '—' }}</span>
-              @endif
-            </td>
-          </tr>
-        @empty
-          <tr><td colspan="5" style="text-align:center;padding:16px;color:#6b7280">Belum ada data.</td></tr>
-        @endforelse
+      @forelse($recentPayments as $p)
+        @php
+          $ps   = strtoupper($p->status ?? '');
+          // Ambil fee per-client; fallback ke config default jika tidak ada / 0
+          $feeDefault = (int) config('pay.admin_fee_flat_default', 0);
+          // kalau ada relasi $p->client, pakai nilainya; kalau 0/null, fallback default
+          $feeClient  = (int) optional($p->client)->admin_fee_flat ?: 0;
+          $adminFee   = $feeClient > 0 ? $feeClient : $feeDefault;
+          $gross      = (int) ($p->amount ?? 0);
+          $net        = max(0, $gross - $adminFee);
+        @endphp
+        <tr>
+          <td>{{ optional($p->created_at)->timezone(config('app.timezone'))->format('Y-m-d H:i:s') }}</td>
+          <td class="mono">{{ $p->order_id }}</td>
+          <td class="mono">{{ $p->client_id ?: 'DEFAULT' }}</td>
+          <td>Rp{{ number_format($gross,0,',','.') }}</td>
+          <td class="mono">Rp{{ number_format($adminFee,0,',','.') }}</td>
+          <td><strong>Rp{{ number_format($net,0,',','.') }}</strong></td>
+          <td>
+            @if($ps==='PAID') <span class="pill pill--ok">PAID</span>
+            @elseif($ps==='PENDING') <span class="pill">PENDING</span>
+            @else <span class="pill pill--off">{{ $ps ?: '—' }}</span>
+            @endif
+          </td>
+        </tr>
+      @empty
+        <tr><td colspan="7" style="text-align:center;padding:16px;color:#6b7280">Belum ada data.</td></tr>
+      @endforelse
       </tbody>
     </table>
   </div>
