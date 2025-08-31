@@ -2,5 +2,5 @@
 return [
   'server_key' => env('MIDTRANS_SERVER_KEY', ''),
   'is_production' => (bool) env('MIDTRANS_IS_PRODUCTION', false),
-  'verify_signature' => env('MIDTRANS_VERIFY_SIGNATURE', app()->environment('production')),
+  'verify_signature' => (bool) (env('MIDTRANS_VERIFY_SIGNATURE', null) ?? (env('APP_ENV') === 'production')),
 ];

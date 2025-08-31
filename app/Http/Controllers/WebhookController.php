@@ -62,13 +62,10 @@ class WebhookController extends Controller
             $statusCode   = (string)($payload['status_code']   ?? '');
             $grossAmount  = (string)($payload['gross_amount']  ?? '');
 
-            // Ambil dari config yang konsisten
             $serverKey = (string) (config('midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY', ''));
+            $shouldVerify = (bool) config('midtrans.verify_signature', false);
 
-            // Hanya verifikasi kalau diminta (default: production saja)
-            $shouldVerify = (bool) config('midtrans.verify_signature', app()->environment('production'));
-
-            $signatureValid = true; // default true kalau skip
+            $signatureValid = true;
             if ($shouldVerify) {
                 $statusCode   = (string)($payload['status_code']   ?? '');
                 $grossAmount  = (string)($payload['gross_amount']  ?? '');
@@ -78,12 +75,11 @@ class WebhookController extends Controller
                 $signatureValid = ($serverKey !== '' && $signatureKey !== '' && hash_equals($expectedSig, $signatureKey));
 
                 if (!$signatureValid) {
-                    // Di non-prod cukup debug agar log tidak “galak”
-                    if (app()->environment('production')) {
-                        \Log::warning('Midtrans signature INVALID', ['order_id' => $orderId]);
-                    } else {
-                        \Log::debug('Midtrans signature INVALID (sandbox, di-skip)', ['order_id' => $orderId]);
-                    }
+                    // Di sandbox: cukup debug; di production: warning
+                    logger()->{app()->environment('production') ? 'warning' : 'debug'}(
+                        'Midtrans signature INVALID',
+                        ['order_id' => $orderId]
+                    );
                     return response()->json(['ok' => true]);
                 }
             }
