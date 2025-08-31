@@ -88,12 +88,17 @@
     <p class="text-sm mb-4">Order ID: <strong class="code">{{ $orderId }}</strong></p>
 
     @php
-      $authMode = isset($authMode) ? strtolower((string)$authMode) : null; // 'code'|'userpass'|null
-      $u = is_array($creds ?? null) ? ($creds['u'] ?? null) : null;
-      $p = is_array($creds ?? null) ? ($creds['p'] ?? null) : null;
-      $infer = ($u && $p && strtoupper($u) === strtoupper($p)) ? 'code' : 'userpass';
-      $mode = in_array($authMode, ['code','userpass'], true) ? $authMode : $infer;
+      $authMode  = isset($authMode) ? strtolower((string)$authMode) : null;
+      $u         = is_array($creds ?? null) ? ($creds['u'] ?? null) : null;
+      $p         = is_array($creds ?? null) ? ($creds['p'] ?? null) : null;
+      $infer     = ($u && $p && strtoupper($u) === strtoupper($p)) ? 'code' : 'userpass';
+      $mode      = in_array($authMode, ['code','userpass'], true) ? $authMode : $infer;
       $portalUrl = $hotspotPortal ?? config('hotspot.portal_default');
+
+      // <<< NEW: kontrol awal loader & step >>>
+      $showLoader   = $orderId && ( ($status === 'PENDING') || ($status === 'PAID' && empty($creds)) );
+      $initialStep  = $status === 'PENDING' ? 1 : ( ($status === 'PAID' && empty($creds)) ? 2 : 0 );
+      $initialPct   = $initialStep ? max(0, min(100, ($initialStep-1) * 33)) : 0; // 1→0%, 2→33%, 3→66%, 4→99%
     @endphp
 
     @if($status === 'PAID')
@@ -187,7 +192,7 @@
 
 {{-- SMART LOADER OVERLAY --}}
 @if($orderId)
-<div id="smart-loader" aria-live="polite" aria-busy="true">
+<div id="smart-loader" class="{{ $showLoader ? 'is-visible' : '' }}" aria-live="polite" aria-busy="{{ $showLoader ? 'true':'false' }}">
   <div class="loader-card">
     <div class="loader-head">
       <div class="spin" aria-hidden="true"></div>
@@ -199,38 +204,26 @@
 
     <div class="loader-body">
       <ul class="steps">
-        <li class="step" data-step="1">
+        <li class="step {{ $initialStep > 1 ? 'is-done' : ($initialStep === 1 ? 'is-active' : '') }}" data-step="1">
           <div class="dot" aria-hidden="true"></div>
-          <div>
-            <div class="txt">Cek status pembayaran</div>
-            <div class="help">Sinkron dengan Midtrans/Webhook</div>
-          </div>
+          <div><div class="txt">Cek status pembayaran</div><div class="help">Sinkron dengan Midtrans/Webhook</div></div>
         </li>
-        <li class="step" data-step="2">
+        <li class="step {{ $initialStep > 2 ? 'is-done' : ($initialStep === 2 ? 'is-active' : '') }}" data-step="2">
           <div class="dot" aria-hidden="true"></div>
-          <div>
-            <div class="txt">Siapkan akun hotspot</div>
-            <div class="help">Buat kredensial</div>
-          </div>
+          <div><div class="txt">Siapkan akun hotspot</div><div class="help">Buat kredensial</div></div>
         </li>
-        <li class="step" data-step="3">
+        <li class="step {{ $initialStep > 3 ? 'is-done' : ($initialStep === 3 ? 'is-active' : '') }}" data-step="3">
           <div class="dot" aria-hidden="true"></div>
-          <div>
-            <div class="txt">Dorong ke router</div>
-            <div class="help">Provision Mikrotik</div>
-          </div>
+          <div><div class="txt">Dorong ke router</div><div class="help">Provision Mikrotik</div></div>
         </li>
-        <li class="step" data-step="4">
+        <li class="step {{ $initialStep > 4 ? 'is-done' : ($initialStep === 4 ? 'is-active' : '') }}" data-step="4">
           <div class="dot" aria-hidden="true"></div>
-          <div>
-            <div class="txt">Kirim WhatsApp</div>
-            <div class="help">Kredensial dikirim ke nomor kamu</div>
-          </div>
+          <div><div class="txt">Kirim WhatsApp</div><div class="help">Kredensial dikirim ke nomor kamu</div></div>
         </li>
       </ul>
 
-      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <i style="width:0%"></i>
+      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $initialPct }}">
+        <i style="width:{{ $initialPct }}%"></i>
       </div>
     </div>
 
@@ -243,6 +236,7 @@
     </div>
   </div>
 </div>
+
 <noscript>
   <div style="position:fixed;left:0;right:0;bottom:0;background:#fee2e2;color:#7f1d1d;padding:.6rem 1rem;text-align:center;font-size:.9rem">
     Aktifkan JavaScript untuk melihat progres otomatis.
@@ -300,10 +294,6 @@
   const ELAPSED = document.getElementById('elapsed');
   const BTN_REFRESH = document.getElementById('btn-refresh');
 
-  function shouldShowLoader(){
-    return !!ORDER_ID && ((CURRENT_STATUS === 'PENDING') || (CURRENT_STATUS === 'PAID' && !HAS_CREDS));
-  }
-
   function setStepState(activeIndex){ // 1..4
     if (!STEPS) return;
     STEPS.forEach((li, idx) => {
@@ -360,13 +350,24 @@
 
   function showLoader(){
     if (!LOADER) return;
+    // kalau sudah visible dari server, jangan toggle lagi
     LOADER.classList.add('is-visible');
-    setStepState(CURRENT_STATUS === 'PENDING' ? 1 : 2);
+    // kalau server belum preset, set dari JS (fallback)
+    const anyActive = LOADER.querySelector('.step.is-active, .step.is-done');
+    if (!anyActive){
+      setStepState(CURRENT_STATUS === 'PENDING' ? 1 : 2);
+    }
     startElapsed();
     poll();
   }
 
-  if (shouldShowLoader()) showLoader();
+  // start: kalau server sudah visible → langsung start timer & polling
+  if (LOADER?.classList.contains('is-visible')) {
+    showLoader();
+  } else if ( (CURRENT_STATUS === 'PENDING') || (CURRENT_STATUS === 'PAID' && !HAS_CREDS) ) {
+    showLoader();
+  }
+
   BTN_REFRESH?.addEventListener('click', ()=> location.reload());
 })();
 </script>
