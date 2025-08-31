@@ -102,7 +102,7 @@
           @else
             <span class="help"> | Basis: Net untuk client</span>
           @endif
-          <span class="help"> | Total: Rp{{ number_format((int)($total7 ?? 0),0,',','.') }}</span>
+          <span class="help"> | Total Revenue 7 hari: Rp{{ number_format($total7Revenue,0,',','.') }}</span>
         </div>
       </div>
 
@@ -189,7 +189,7 @@
           @else
             <span class="help"> | Basis: Net untuk client</span>
           @endif
-          <span class="help"> | Total: Rp{{ number_format((int)($monthRevenue ?? 0),0,',','.') }}</span>
+          <span class="help"> | Total Revenue 1 bulan: Rp{{ number_format($totalMonthRevenue,0,',','.') }}</span>
         </div>
       </div>
 

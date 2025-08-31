@@ -22,24 +22,19 @@ class AdminDashboardController extends Controller
     $isAdmin      = $this->userIsAdmin($user);
     $clientFilter = $this->resolveClientId($user, ''); // admin: '', user: client-nya
 
-    // Normalisasi konstanta status
     $S_PAID    = \defined(\App\Models\Payment::class.'::S_PAID')    ? Payment::S_PAID    : 'PAID';
     $S_PENDING = \defined(\App\Models\Payment::class.'::S_PENDING') ? Payment::S_PENDING : 'PENDING';
 
-    // Default admin fee bila kolom client NULL/tidak ada
     $feeDefault = (int) config('pay.admin_fee_flat_default', 0);
-    // Ekspresi SQL admin fee per client (ambil dari clients.admin_fee_flat, fallback default)
     $feeExpr = 'COALESCE(NULLIF(clients.admin_fee_flat, 0), ' . $feeDefault . ')';
 
-    // Base query payments sesuai scope client
     $payBase = Payment::query()
       ->when($clientFilter !== '', fn($q) => $q->where('payments.client_id', $clientFilter));
 
-    // Versi join ke clients supaya bisa hitung fee via SQL
     $payBaseJoin = (clone $payBase)
       ->leftJoin('clients', 'clients.client_id', '=', 'payments.client_id');
 
-    // ===== Ringkas (KPI) =====
+    // KPI
     $clientsActive = Client::query()
       ->when($clientFilter !== '', fn($q) => $q->where('client_id', $clientFilter))
       ->where('is_active', 1)
@@ -53,9 +48,6 @@ class AdminDashboardController extends Controller
       ->where('payments.status', $S_PENDING)
       ->count();
 
-    // Revenue hari ini:
-    //   Admin  = SUM(admin_fee_flat)
-    //   Client = SUM(GREATEST(amount - admin_fee_flat, 0))
     $todayRevenue = (int) (clone $payBaseJoin)
       ->where('payments.status', $S_PAID)
       ->whereBetween('payments.paid_at', [$now->copy()->startOfDay(), $now->copy()->endOfDay()])
@@ -66,14 +58,13 @@ class AdminDashboardController extends Controller
       )
       ->value('s');
 
-    // ===== 7 Hari Terakhir =====
+    // 7 hari
     $start7 = $now->copy()->subDays(6)->startOfDay();
     $days = [];
     for ($i = 0; $i < 7; $i++) {
       $days[] = $start7->copy()->addDays($i)->format('Y-m-d');
     }
 
-    // Count per created_at
     $rawCount = (clone $payBase)
       ->select(DB::raw('DATE(payments.created_at) as d'), DB::raw('COUNT(*) as c'))
       ->where('payments.created_at', '>=', $start7)
@@ -81,7 +72,6 @@ class AdminDashboardController extends Controller
       ->pluck('c', 'd')
       ->toArray();
 
-    // Sum per paid_at (fee untuk admin, net untuk client)
     $rawSum = (clone $payBaseJoin)
       ->selectRaw('DATE(payments.paid_at) as d')
       ->selectRaw(($isAdmin
@@ -100,8 +90,8 @@ class AdminDashboardController extends Controller
       $seriesCount[] = (int) ($rawCount[$d] ?? 0);
       $seriesSum[]   = (int) ($rawSum[$d]   ?? 0);
     }
+    $total7Revenue = array_sum($seriesSum);
 
-    // Top clients 7 hari
     if ($isAdmin) {
       $topClients7 = (clone $payBaseJoin)
         ->where('payments.status', $S_PAID)
@@ -124,7 +114,7 @@ class AdminDashboardController extends Controller
       ]]);
     }
 
-    // ===== Bulan Berjalan (1 bulan) =====
+    // Bulan berjalan
     $monthStart = $now->copy()->startOfMonth();
     $monthEnd   = $now->copy()->endOfDay();
 
@@ -170,6 +160,7 @@ class AdminDashboardController extends Controller
       $seriesCountM[] = (int) ($rawCountM[$d] ?? 0);
       $seriesSumM[]   = (int) ($rawSumM[$d]   ?? 0);
     }
+    $totalMonthRevenue = array_sum($seriesSumM);
 
     if ($isAdmin) {
       $topClientsM = (clone $payBaseJoin)
@@ -193,7 +184,6 @@ class AdminDashboardController extends Controller
       ]]);
     }
 
-    // ===== Tabel pembayaran terbaru =====
     $recentPayments = (clone $payBase)
       ->orderByDesc('payments.created_at')
       ->limit(8)
@@ -215,7 +205,9 @@ class AdminDashboardController extends Controller
       'monthDays',
       'seriesCountM',
       'seriesSumM',
-      'topClientsM'
+      'topClientsM',
+      'total7Revenue',
+      'totalMonthRevenue'
     ));
   }
 }
