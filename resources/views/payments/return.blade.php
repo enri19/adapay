@@ -206,7 +206,7 @@
       <ul class="steps">
         <li class="step {{ $initialStep > 1 ? 'is-done' : ($initialStep === 1 ? 'is-active' : '') }}" data-step="1">
           <div class="dot" aria-hidden="true"></div>
-          <div><div class="txt">Cek status pembayaran</div><div class="help">Sinkron dengan Midtrans/Webhook</div></div>
+          <div><div class="txt">Cek status pembayaran</div><div class="help">Sinkron dengan Webhook Payment</div></div>
         </li>
         <li class="step {{ $initialStep > 2 ? 'is-done' : ($initialStep === 2 ? 'is-active' : '') }}" data-step="2">
           <div class="dot" aria-hidden="true"></div>
@@ -214,7 +214,7 @@
         </li>
         <li class="step {{ $initialStep > 3 ? 'is-done' : ($initialStep === 3 ? 'is-active' : '') }}" data-step="3">
           <div class="dot" aria-hidden="true"></div>
-          <div><div class="txt">Dorong ke router</div><div class="help">Provision Mikrotik</div></div>
+          <div><div class="txt">Dorong ke router</div><div class="help">Provision Router</div></div>
         </li>
         <li class="step {{ $initialStep > 4 ? 'is-done' : ($initialStep === 4 ? 'is-active' : '') }}" data-step="4">
           <div class="dot" aria-hidden="true"></div>
