@@ -61,16 +61,31 @@ class WebhookController extends Controller
             // Validasi signature Midtrans (optional tapi disarankan)
             $statusCode   = (string)($payload['status_code']   ?? '');
             $grossAmount  = (string)($payload['gross_amount']  ?? '');
-            $signatureKey = (string)($payload['signature_key'] ?? '');
-            $serverKey    = (string) Config::get('services.midtrans.server_key', '');
 
-            $expectedSig = hash('sha512', $orderId.$statusCode.$grossAmount.$serverKey);
-            $signatureValid = ($serverKey !== '' && $signatureKey !== '' && hash_equals($expectedSig, $signatureKey));
+            // Ambil dari config yang konsisten
+            $serverKey = (string) (config('midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY', ''));
 
-            if (!$signatureValid) {
-                // Tetap balas 200 agar Midtrans tidak retry; jangan update order
-                Log::warning('Midtrans signature INVALID', ['order_id'=>$orderId]);
-                return response()->json(['ok' => true]);
+            // Hanya verifikasi kalau diminta (default: production saja)
+            $shouldVerify = (bool) config('midtrans.verify_signature', app()->environment('production'));
+
+            $signatureValid = true; // default true kalau skip
+            if ($shouldVerify) {
+                $statusCode   = (string)($payload['status_code']   ?? '');
+                $grossAmount  = (string)($payload['gross_amount']  ?? '');
+                $signatureKey = (string)($payload['signature_key'] ?? '');
+
+                $expectedSig  = hash('sha512', $orderId.$statusCode.$grossAmount.$serverKey);
+                $signatureValid = ($serverKey !== '' && $signatureKey !== '' && hash_equals($expectedSig, $signatureKey));
+
+                if (!$signatureValid) {
+                    // Di non-prod cukup debug agar log tidak “galak”
+                    if (app()->environment('production')) {
+                        \Log::warning('Midtrans signature INVALID', ['order_id' => $orderId]);
+                    } else {
+                        \Log::debug('Midtrans signature INVALID (sandbox, di-skip)', ['order_id' => $orderId]);
+                    }
+                    return response()->json(['ok' => true]);
+                }
             }
 
             $incomingAppStatus = $this->normalizeIncoming((string)($payload['transaction_status'] ?? ''));
