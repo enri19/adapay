@@ -334,7 +334,7 @@
   // Poll /payments/{orderId} → hanya butuh status
   let interval = 2000, hardStopMs = 120000; // 2 menit
   function poll(){
-    fetch('/payments/' + encodeURIComponent(ORDER_ID), {headers:{'Accept':'application/json'}})
+    fetch('/api/payments/' + encodeURIComponent(ORDER_ID), {headers:{'Accept':'application/json'}})
       .then(r=>r.ok ? r.json() : Promise.reject(new Error('HTTP '+r.status)))
       .then(data=>{
         const status = (data.status || '').toUpperCase();
