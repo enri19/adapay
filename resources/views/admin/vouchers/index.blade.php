@@ -23,27 +23,6 @@
               </select>
             </div>
           @else
-            {{-- User non-admin: kunci client_id lewat hidden agar konsisten di pagination/export --}}
-            <input type="hidden" name="client_id" value="{{ $client }}">
-          @endcan
-          <div class="control"><input class="input" type="search" name="q" value="{{ $q }}" placeholder="Cari nama/kode/profil"></div>
-          <button class="btn">Filter</button>
-        </form>
-        <div style="display:flex;gap:8px;align-items:center">
-
-        <form method="GET" action="{{ route('admin.vouchers.index') }}" style="display:flex;gap:8px;align-items:center">
-          @can('is-admin')
-            <div class="control">
-              <select name="client_id" class="select">
-                <option value="">Semua client</option>
-                @foreach($clients as $c)
-                  <option value="{{ $c->client_id }}" {{ $client===$c->client_id?'selected':'' }}>
-                    {{ $c->client_id }} — {{ $c->name }}
-                  </option>
-                @endforeach
-              </select>
-            </div>
-          @else
             <input type="hidden" name="client_id" value="{{ $client }}">
           @endcan
           <div class="control"><input class="input" type="search" name="q" value="{{ $q }}" placeholder="Cari nama/kode/profil"></div>
@@ -69,8 +48,6 @@
           {{-- Non-admin: langsung ke create dengan client miliknya --}}
           <a href="{{ route('admin.vouchers.create', ['client_id' => $client]) }}" class="btn btn--primary">Tambah</a>
         @endcan
-        
-      </div>
       </div>
     </div>
   </div>
