@@ -29,7 +29,7 @@ class AdminDashboardController extends Controller
     // Default admin fee bila kolom client NULL/tidak ada
     $feeDefault = (int) config('pay.admin_fee_flat_default', 0);
     // Ekspresi SQL admin fee per client (ambil dari clients.admin_fee_flat, fallback default)
-    $feeExpr = 'COALESCE(clients.admin_fee_flat, ' . $feeDefault . ')';
+    $feeExpr = 'COALESCE(NULLIF(clients.admin_fee_flat, 0), ' . $feeDefault . ')';
 
     // Base query payments sesuai scope client
     $payBase = Payment::query()
