@@ -9,20 +9,29 @@
   .kpi .value{font-weight:800;font-size:1.4rem;margin-top:4px}
   .kpi .sub{font-size:.8rem;color:var(--mut)}
 
-  /* ⬇️ Mini bars: bottom-aligned */
+  .tabs{display:flex;gap:8px;margin-top:12px}
+  .tab-btn{appearance:none;border:1px solid var(--bd);background:var(--card);padding:8px 12px;border-radius:.5rem;cursor:pointer;font-weight:600}
+  .tab-btn[aria-selected="true"]{outline:2px solid #6366f1; border-color:#6366f1}
+  .tab-panels{margin-top:10px}
+  .tab-panel{display:none}
+  .tab-panel.active{display:block}
+
+  .grid-2{display:grid;gap:12px}
+  @media(min-width:768px){ .grid-2{grid-template-columns:1fr 1fr} }
+
   .mini-bars{
-    display:flex;                /* pakai flex agar baseline gampang dikunci di bawah */
-    align-items:flex-end;        /* semua batang nempel ke bawah */
+    display:flex;
+    align-items:flex-end;
     gap:6px;
-    height:72px;                 /* tinggi area grafik */
-    padding:0 2px;               /* sedikit ruang sisi */
+    height:72px;
+    padding:0 2px;
     overflow:hidden;
   }
   .mini-bars > div{
     position:relative;
-    flex:1 0 0;                  /* tiap kolom lebar sama, tidak wrap */
+    flex:1 0 0;
     display:flex;
-    align-items:flex-end;        /* isi kolom juga nempel bawah */
+    align-items:flex-end;
   }
   .mini-bars .bar{
     width:100%;
@@ -34,10 +43,9 @@
     position:absolute;
     left:3px; right:3px; bottom:0; opacity:.9; border-radius:6px;
   }
-
   .section-title{font-weight:700;margin-bottom:8px}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
-  @media(max-width:900px){ .kpis{grid-template-columns:1fr 1fr} }
+  .table-wrap{overflow:auto}
 </style>
 @endpush
 
@@ -269,7 +277,7 @@
           <th>Status</th>
         </tr>
       </thead>
-
+      
       <tbody>
       @forelse($recentPayments as $p)
         @php
