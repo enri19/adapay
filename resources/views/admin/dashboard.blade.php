@@ -80,7 +80,7 @@
   {{-- PANEL: 7 HARI --}}
   <section id="panel-7d" role="tabpanel" aria-labelledby="tab-7d" class="tab-panel active">
     <div class="grid-2">
-      <div class="card">
+      <div class="card card--chart">
         <div class="section-title">7 hari terakhir — Volume & Revenue</div>
         @php
           $maxC = max($seriesCount) ?: 1;
@@ -168,7 +168,7 @@
   {{-- PANEL: 1 BULAN --}}
   <section id="panel-1m" role="tabpanel" aria-labelledby="tab-1m" class="tab-panel">
     <div class="grid-2">
-      <div class="card">
+      <div class="card card--chart">
         <div class="section-title">1 Bulan Terakhir — Volume & Revenue</div>
         @php
           $maxCM = max($seriesCountM ?? []) ?: 1;
