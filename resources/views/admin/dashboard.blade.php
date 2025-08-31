@@ -3,7 +3,7 @@
 
 @push('head')
 <style>
-  .kpis{display:grid;gap:12px;grid-template-columns:repeat(4,minmax(0,1fr))}
+  .kpis{display:grid;gap:12px;}
   .kpi{background:var(--card);border:1px solid var(--bd);border-radius:.75rem;padding:14px}
   .kpi .label{font-size:.82rem;color:var(--mut)}
   .kpi .value{font-weight:800;font-size:1.4rem;margin-top:4px}
@@ -35,7 +35,8 @@
 @endpush
 
 @section('content')
-<div class="kpis">
+@php $cols = (!empty($isAdmin) && $isAdmin) ? 4 : 3; @endphp
+<div class="kpis" style="grid-template-columns: repeat({{ $cols }}, minmax(0, 1fr));">
   <div class="kpi">
     <div class="label">Login sebagai</div>
     <div class="value" title="{{ auth()->user()->email }}">{{ auth()->user()->name }}</div>
