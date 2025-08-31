@@ -66,6 +66,11 @@
           <label class="label">Default Profile</label>
           <div class="control"><input class="input" name="default_profile" value="{{ old('default_profile',$client->default_profile ?? 'default') }}"></div>
         </div>
+
+        <div>
+          <label class="label">Admin Fee</label>
+          <div class="control"><input class="input" name="admin_fee_flat" value="{{ old('admin_fee_flat',$client->admin_fee_flat) }}"></div>
+        </div>
         
         <div>
         <label class="label">Metode Login</label>
