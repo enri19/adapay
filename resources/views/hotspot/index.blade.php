@@ -219,6 +219,7 @@
 @push('scripts')
 <script>
 (function(){
+  // ========= Utils umum =========
   function setLoading(btn,on,txt){
     if(!btn) return;
     const label = btn.querySelector('.btn__label');
@@ -231,127 +232,142 @@
       label.textContent = (on && txt) ? txt : btn.__orig;
     }
   }
-
-  // --- NEW: helpers untuk client id ---
   function sanitizeClientId(s){
     return (String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12) || 'DEFAULT');
   }
-  function isBaseHost(){
-    return location.hostname.toLowerCase() === 'pay.adanih.info';
-  }
-  function getResolvedClientId(){
-    // Jika BUKAN base host → pakai subdomain pertama sebagai client (c1.pay.adanih.info)
-    if (!isBaseHost()){
-      var parts = location.hostname.split('.');
-      if (parts.length > 3) { // contoh: c1.pay.adanih.info
-        return sanitizeClientId(parts[0]);
-      }
-    }
-    // Base host atau tidak ada subdomain → coba query ?client
-    var q = new URLSearchParams(location.search).get('client');
-    if (q) return sanitizeClientId(q);
-
-    // Kalau base host, baca dari picker
-    var sel = document.getElementById('clientSelect');
-    if (sel) return sanitizeClientId(sel.value);
-    var inp = document.getElementById('clientInput');
-    if (inp) return sanitizeClientId(inp.value);
-
-    return 'DEFAULT';
-  }
-
-  // === on DOM ready: set hidden client_id & update saat picker berubah ===
-  document.addEventListener('DOMContentLoaded', function(){
-    var hid = document.getElementById('client_id');
-    if (hid) hid.value = getResolvedClientId();
-
-    // Update otomatis kalau user ganti client (hanya base host)
-    var sel = document.getElementById('clientSelect');
-    if (sel) sel.addEventListener('change', function(){
-      if (hid) hid.value = getResolvedClientId();
-    });
-    var inp = document.getElementById('clientInput');
-    if (inp) ['input','blur'].forEach(ev => inp.addEventListener(ev, function(){
-      if (hid) hid.value = getResolvedClientId();
-    }));
-  });
-
-  function errElFor(input){
-    const errId = (input?.id || '').replace(/^fld/, 'err');
-    return document.getElementById(errId);
-  }
-  function showFieldError(input, msg){
-    const err = errElFor(input);
-    if (!err || !input) return;
-    if (msg){
-      err.textContent = msg;
-      err.classList.remove('hidden');
-      input.classList.add('border-red-500','focus:ring-red-200');
-      input.setAttribute('aria-invalid','true');
-      input.focus();
-    } else {
-      err.textContent = '';
-      err.classList.add('hidden');
-      input.classList.remove('border-red-500','focus:ring-red-200');
-      input.removeAttribute('aria-invalid');
-    }
-  }
-
-  // === Validators ===
-  function validateName(input){
-    const v = String(input?.value || '').trim();
-    if (v.length < 2) return 'Nama wajib diisi (min. 2 karakter).';
-    if (!/\S/.test(v)) return 'Nama tidak boleh hanya spasi.';
-    return '';
-  }
-  function normalizeIdPhone(raw){
-    const s = String(raw || '').trim();
-    if (!s) return { norm: '', digits: '', ok: false };
-    const plus62 = s.startsWith('+62');
-    const digits = s.replace(/\D+/g,'');
-    let norm = digits;
-    if (plus62) { norm = '62' + digits.slice(2); }
-    else if (digits.startsWith('62')) { norm = digits; }
-    else if (digits.startsWith('0')) { norm = '62' + digits.slice(1); }
-    const ok = /^62[0-9]{9,13}$/.test(norm) && /^62[8]/.test(norm);
-    return { norm, digits, ok };
-  }
-  function validatePhone(input){
-    const v = String(input?.value || '').trim();
-    if (!v) return { msg: 'No WhatsApp wajib diisi.', norm: '' };
-    const { norm, ok } = normalizeIdPhone(v);
-    if (!ok) { return { msg: 'Format WA harus diawali 08 / 62 / +62 dan valid.', norm: '' }; }
-    return { msg: '', norm };
-  }
-
-  // ===== Ringkasan (voucher/method) =====
+  function isBaseHost(){ return location.hostname.toLowerCase() === 'pay.adanih.info'; }
   function rupiah(n){
     const x = Math.max(0, parseInt(n||0,10));
     return 'Rp' + x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   }
+
+  // ========= Elemen DOM =========
+  const formEl     = document.getElementById('frm');
+  const payBtn     = document.getElementById('payBtn');
+  const errBox     = document.getElementById('payErr');
+  const hidClient  = document.getElementById('client_id');
+  const selClient  = document.getElementById('clientSelect');  // hanya ada di base host
+  const selVoucher = document.getElementById('voucherSelect');
+  const nameInput  = document.getElementById('fldName');
+  const phoneInput = document.getElementById('fldPhone');
+
+  const sumName    = document.getElementById('sumVoucherName');
+  const sumTotal   = document.getElementById('sumTotal');
+  const sumMethod  = document.getElementById('sumMethod');
+  const noVoucher  = document.getElementById('noVoucherBox');
+
+  // pakai URL absolut biar aman walau route name belum diset
+  const VOUCHERS_URL = "{{ url('/api/hotspot/vouchers') }}";
+
+  // ========= Client resolver =========
+  function getResolvedClientId(){
+    // *.pay.adanih.info -> ambil subdomain
+    if (!isBaseHost()){
+      const parts = location.hostname.split('.');
+      if (parts.length > 3 && parts[0]) return sanitizeClientId(parts[0]);
+    }
+    // base host -> ambil dari select (kalau ada) atau dari query ?client
+    if (selClient && selClient.value) return sanitizeClientId(selClient.value);
+    const q = new URLSearchParams(location.search).get('client');
+    if (q) return sanitizeClientId(q);
+    return sanitizeClientId(hidClient ? hidClient.value : 'DEFAULT');
+  }
+
+  // ========= Validasi field =========
+  function errElFor(input){ const id=(input?.id||'').replace(/^fld/,'err'); return document.getElementById(id); }
+  function showFieldError(input,msg){
+    const err=errElFor(input); if(!err||!input) return;
+    if(msg){ err.textContent=msg; err.classList.remove('hidden'); input.classList.add('border-red-500','focus:ring-red-200'); input.setAttribute('aria-invalid','true'); }
+    else { err.textContent=''; err.classList.add('hidden'); input.classList.remove('border-red-500','focus:ring-red-200'); input.removeAttribute('aria-invalid'); }
+  }
+  function validateName(input){
+    const v=String(input?.value||'').trim();
+    if (v.length<2) return 'Nama wajib diisi (min. 2 karakter).';
+    if (!/\S/.test(v)) return 'Nama tidak boleh hanya spasi.';
+    return '';
+  }
+  function normalizeIdPhone(raw){
+    const s=String(raw||'').trim(); if(!s) return {norm:'',ok:false};
+    const plus62=s.startsWith('+62'); const digits=s.replace(/\D+/g,'');
+    let norm=digits;
+    if (plus62) norm='62'+digits.slice(2);
+    else if (digits.startsWith('62')) norm=digits;
+    else if (digits.startsWith('0')) norm='62'+digits.slice(1);
+    const ok=/^62[0-9]{9,13}$/.test(norm) && /^62[8]/.test(norm);
+    return {norm,ok};
+  }
+  function validatePhone(input){
+    const v=String(input?.value||'').trim();
+    if(!v) return {msg:'No WhatsApp wajib diisi.',norm:''};
+    const {norm,ok}=normalizeIdPhone(v);
+    if(!ok) return {msg:'Format WA harus diawali 08 / 62 / +62 dan valid.',norm:''};
+    return {msg:'',norm};
+  }
+
+  // ========= Ringkasan =========
   function currentMethod(){
-    const r = document.querySelector('.pm-radio:checked');
+    const r=document.querySelector('.pm-radio:checked');
     return (r && (r.value||'').toUpperCase()) || 'QRIS';
   }
   function updateSummary(){
-    const sel = document.getElementById('voucherSelect');
-    const mth = currentMethod();
-    const name = sel ? sel.selectedOptions[0]?.dataset?.name : null;
-    const price = sel ? parseInt(sel.selectedOptions[0]?.dataset?.price||0,10) : 0;
-    document.getElementById('sumVoucherName').textContent = name || '—';
-    document.getElementById('sumMethod').textContent = mth;
-    document.getElementById('sumTotal').textContent = rupiah(price);
+    const opt = selVoucher ? selVoucher.options[selVoucher.selectedIndex] : null;
+    const name = opt ? (opt.getAttribute('data-name') || opt.textContent || '—') : '—';
+    const price = opt ? parseInt(opt.getAttribute('data-price') || 0,10) : 0;
+    if (sumName)   sumName.textContent  = name;
+    if (sumTotal)  sumTotal.textContent = rupiah(price);
+    if (sumMethod) sumMethod.textContent = currentMethod();
   }
 
-  // set hidden client_id saat load + live validation
-  document.addEventListener('DOMContentLoaded', function(){
-    const hid = document.getElementById('client_id');
-    const cid = getResolvedClientId();
-    if (hid) hid.value = cid;
+  // ========= Voucher AJAX (tanpa jQuery) =========
+  function rebuildVouchers(list){
+    if (!selVoucher) return;
+    selVoucher.innerHTML = '';
+    if (!list || !list.length){
+      if (noVoucher) noVoucher.classList.remove('hidden');
+      selVoucher.disabled = true;
+      if (payBtn) payBtn.disabled = true;
+      updateSummary();
+      return;
+    }
+    if (noVoucher) noVoucher.classList.add('hidden');
+    list.forEach(v=>{
+      const o=document.createElement('option');
+      o.value=v.id;
+      o.textContent=`${v.name} — ${rupiah(v.price)}`;
+      o.setAttribute('data-name', v.name);
+      o.setAttribute('data-price', v.price);
+      selVoucher.appendChild(o);
+    });
+    selVoucher.disabled = false;
+    if (payBtn) payBtn.disabled = false;
+    updateSummary();
+  }
 
-    const nameInput  = document.getElementById('fldName');
-    const phoneInput = document.getElementById('fldPhone');
-    const voucherSel = document.getElementById('voucherSelect');
+  async function fetchVouchers(cid){
+    try{
+      if (hidClient) hidClient.value = cid;
+      if (selVoucher){
+        selVoucher.disabled = true;
+        selVoucher.innerHTML = '<option>Memuat…</option>';
+      }
+      if (payBtn) payBtn.disabled = true;
+
+      const url = VOUCHERS_URL + '?client=' + encodeURIComponent(cid);
+      const res = await fetch(url, { headers: { 'Accept':'application/json' } });
+      if (!res.ok) throw new Error('HTTP '+res.status);
+      const json = await res.json();
+      rebuildVouchers((json && json.data) ? json.data : []);
+    }catch(e){
+      console.error('Gagal memuat voucher:', e);
+      rebuildVouchers([]);
+    }
+  }
+
+  // ========= Event handlers =========
+  // set hidden client id saat load
+  document.addEventListener('DOMContentLoaded', function(){
+    const cid = getResolvedClientId();
+    if (hidClient) hidClient.value = cid;
 
     if (nameInput){
       nameInput.addEventListener('input', ()=>showFieldError(nameInput, validateName(nameInput)));
@@ -361,20 +377,47 @@
       phoneInput.addEventListener('input', ()=>showFieldError(phoneInput, validatePhone(phoneInput).msg));
       phoneInput.addEventListener('blur',  ()=>showFieldError(phoneInput, validatePhone(phoneInput).msg));
     }
-    if (voucherSel){ voucherSel.addEventListener('change', updateSummary); }
-    updateSummary(); // initial
+    if (selVoucher){ selVoucher.addEventListener('change', updateSummary); }
+    if (selClient){  // base host: ganti client tanpa reload
+      selClient.addEventListener('change', ()=>{
+        const newCid = sanitizeClientId(selClient.value || 'DEFAULT');
+        fetchVouchers(newCid);
+      });
+    }
+    // init summary
+    updateSummary();
   });
 
-  const payBtn = document.getElementById('payBtn');
-  const errBox = document.getElementById('payErr');
+  // metode pembayaran (klik kartu)
+  document.addEventListener('DOMContentLoaded', function(){
+    function setChecked(card){
+      document.querySelectorAll('.pm-card').forEach(c=>{
+        c.setAttribute('aria-checked','false');
+        const r=c.querySelector('.pm-radio'); if(r) r.checked=false;
+      });
+      card.setAttribute('aria-checked','true');
+      const radio=card.querySelector('.pm-radio'); if(radio) radio.checked=true;
+      updateSummary();
+    }
+    const current=document.querySelector('.pm-radio:checked');
+    if (current){ const card=current.closest('.pm-card'); if(card) setChecked(card); }
+    document.querySelectorAll('.pay-methods').forEach(group=>{
+      group.addEventListener('click', e=>{
+        const card=e.target.closest('.pm-card'); if(!card) return; setChecked(card);
+      });
+      group.addEventListener('keydown', e=>{
+        if (e.key===' ' || e.key==='Enter'){
+          const card=e.target.closest('.pm-card'); if(!card) return;
+          e.preventDefault(); setChecked(card);
+        }
+      });
+    });
+  });
 
+  // ========= Submit checkout =========
   window.startCheckout = async function(e){
     e.preventDefault();
-    errBox.classList.add('hidden'); errBox.textContent = '';
-
-    const formEl     = document.getElementById('frm');
-    const nameInput  = document.getElementById('fldName');
-    const phoneInput = document.getElementById('fldPhone');
+    if (errBox){ errBox.classList.add('hidden'); errBox.textContent=''; }
 
     // Validasi
     const nameMsg = validateName(nameInput);
@@ -382,18 +425,18 @@
     const { msg: phoneMsg, norm: phoneNorm } = validatePhone(phoneInput);
     if (phoneMsg){ showFieldError(phoneInput, phoneMsg); return false; } else { showFieldError(phoneInput, null); }
 
-    // kumpulkan data
-    const form = new FormData(formEl);
+    // Payload
     const cid = getResolvedClientId();
-    form.set('client_id', cid);
-    const hid = document.getElementById('client_id'); if (hid) hid.value = cid;
+    if (hidClient) hidClient.value = cid;
 
+    const voucherId = selVoucher ? Number(selVoucher.value) : null;
+    const method = (document.querySelector('.pm-radio:checked')?.value || 'qris').toLowerCase();
     const payload = {
-      voucher_id: Number(form.get('voucher_id')),
-      method: (form.get('method') || 'qris').toLowerCase(),
-      name: String(nameInput.value || '').trim(),
-      email: form.get('email') || null,
-      phone: phoneNorm || String(phoneInput.value || '').trim(),
+      voucher_id: voucherId,
+      method: method,
+      name: String(nameInput.value||'').trim(),
+      email: (formEl && formEl.querySelector('[name="email"]')) ? formEl.querySelector('[name="email"]').value || null : null,
+      phone: phoneNorm || String(phoneInput.value||'').trim(),
       client_id: cid,
     };
 
@@ -404,23 +447,22 @@
         headers:{'Content-Type':'application/json','Accept':'application/json'},
         body: JSON.stringify(payload)
       });
-
       const text = await res.text();
-      let data; try{ data = JSON.parse(text); }catch{ throw new Error('RESP_INVALID: ' + text.slice(0,120)); }
+      let data; try{ data = JSON.parse(text); } catch{ throw new Error('RESP_INVALID: ' + text.slice(0,120)); }
 
       if(!res.ok){
         if (res.status === 422) {
           const errs = (data && data.errors) || {};
-          if (errs.name && errs.name[0])  showFieldError(nameInput, errs.name[0]);
+          if (errs.name && errs.name[0])  showFieldError(nameInput,  errs.name[0]);
           if (errs.phone && errs.phone[0]) showFieldError(phoneInput, errs.phone[0]);
           const msg = data.message || errs.name?.[0] || errs.phone?.[0] || 'Data tidak valid.';
           throw new Error(msg);
         }
         const code = data.error || 'CHECKOUT_FAILED';
         let msg = data.message || 'Gagal membuat transaksi.';
-        if(code==='UPSTREAM_TEMPORARY') msg = 'Channel pembayaran sedang gangguan. Coba lagi.';
-        if(code==='CHANNEL_INACTIVE')  msg = 'Channel belum aktif di dashboard Midtrans.';
-        if(code==='POP_REQUIRED')      msg = 'Akun butuh PoP/aktivasi tambahan di Midtrans.';
+        if(code==='UPSTREAM_TEMPORARY') msg='Channel pembayaran sedang gangguan. Coba lagi.';
+        if(code==='CHANNEL_INACTIVE')  msg='Channel belum aktif di dashboard Midtrans.';
+        if(code==='POP_REQUIRED')      msg='Akun butuh PoP/aktivasi tambahan di Midtrans.';
         throw new Error(msg);
       }
 
@@ -433,120 +475,10 @@
 
     }catch(e){
       setLoading(payBtn, false);
-      errBox.textContent = e.message || 'Terjadi kesalahan.';
-      errBox.classList.remove('hidden');
+      if (errBox){ errBox.textContent = e.message || 'Terjadi kesalahan.'; errBox.classList.remove('hidden'); }
       return false;
     }
-  }
-
-  // Metode pembayaran
-  document.addEventListener('DOMContentLoaded', function(){
-    function setChecked(card){
-      document.querySelectorAll('.pm-card').forEach(c=>{
-        c.setAttribute('aria-checked','false');
-        const r = c.querySelector('.pm-radio'); if (r) r.checked = false;
-      });
-      card.setAttribute('aria-checked','true');
-      const radio = card.querySelector('.pm-radio'); if (radio) radio.checked = true;
-      updateSummary();
-    }
-    const current = document.querySelector('.pm-radio:checked');
-    if (current) { const card = current.closest('.pm-card'); if (card) setChecked(card); }
-    document.querySelectorAll('.pay-methods').forEach(group=>{
-      group.addEventListener('click', e=>{
-        const card = e.target.closest('.pm-card'); if(!card) return; setChecked(card);
-      });
-      group.addEventListener('keydown', e=>{
-        if (e.key === ' ' || e.key === 'Enter'){
-          const card = e.target.closest('.pm-card'); if(!card) return;
-          e.preventDefault(); setChecked(card);
-        }
-      });
-    });
-  });
+  };
 })();
-</script>
-
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const selClient   = document.getElementById('clientSelect');   // hanya ada di base host
-  const selVoucher  = document.getElementById('voucherSelect');
-  const hiddenCid   = document.getElementById('client_id');
-  const payBtn      = document.getElementById('payBtn');
-  const noVoucher   = document.getElementById('noVoucherBox');   // optional (placeholder)
-  const sumName     = document.getElementById('sumVoucherName'); // optional (ringkasan)
-  const sumTotal    = document.getElementById('sumTotal');       // optional (ringkasan)
-
-  const VOUCHERS_URL = "{{ route('api.hotspot.vouchers') }}";    // fallback: '/api/hotspot/vouchers'
-
-  function rupiah(n){
-    const x = Math.max(0, parseInt(n||0,10));
-    return 'Rp' + x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  }
-
-  function updateSummaryFromSelect(){
-    if (!selVoucher) return;
-    const opt   = selVoucher.options[selVoucher.selectedIndex];
-    const name  = opt ? (opt.getAttribute('data-name') || opt.textContent || '—') : '—';
-    const price = opt ? parseInt(opt.getAttribute('data-price') || 0, 10) : 0;
-    if (sumName)  sumName.textContent  = name;
-    if (sumTotal) sumTotal.textContent = rupiah(price);
-  }
-
-  function rebuildVouchers(list){
-    if (!selVoucher) return;
-    selVoucher.innerHTML = '';
-    if (!list || !list.length){
-      if (noVoucher) noVoucher.classList.remove('hidden');
-      selVoucher.disabled = true;
-      if (payBtn) payBtn.disabled = true;
-      updateSummaryFromSelect();
-      return;
-    }
-    if (noVoucher) noVoucher.classList.add('hidden');
-    list.forEach(v => {
-      const o = document.createElement('option');
-      o.value = v.id;
-      o.textContent = `${v.name} — ${rupiah(v.price)}`;
-      o.setAttribute('data-name', v.name);
-      o.setAttribute('data-price', v.price);
-      selVoucher.appendChild(o);
-    });
-    selVoucher.disabled = false;
-    if (payBtn) payBtn.disabled = false;
-    updateSummaryFromSelect();
-  }
-
-  async function fetchVouchers(cid){
-    try{
-      if (hiddenCid) hiddenCid.value = cid;
-      if (selVoucher){
-        selVoucher.disabled = true;
-        selVoucher.innerHTML = '<option>Memuat…</option>';
-      }
-      if (payBtn) payBtn.disabled = true;
-
-      const url = `${VOUCHERS_URL}?client=${encodeURIComponent(cid)}`;
-      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      rebuildVouchers(json && json.data ? json.data : []);
-    } catch (e){
-      console.error('Gagal memuat voucher:', e);
-      rebuildVouchers([]);
-    }
-  }
-
-  // saat user ganti client (base host)
-  if (selClient){
-    selClient.addEventListener('change', () => {
-      const cid = String(selClient.value || 'DEFAULT').toUpperCase();
-      fetchVouchers(cid);
-    });
-  }
-
-  // init ringkasan saat load (untuk kondisi awal dari server)
-  updateSummaryFromSelect();
-});
 </script>
 @endpush
