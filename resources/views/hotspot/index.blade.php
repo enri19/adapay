@@ -72,8 +72,7 @@
             @else
               <label class="block text-sm font-medium mb-1">Client</label>
               <select id="clientSelect"
-                      class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
-                      onchange="location.href='{{ url('/hotspot') }}?client=' + encodeURIComponent(this.value)">
+                      class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200">
                 @foreach($clients as $c)
                   <option value="{{ $c->client_id }}"
                     @if(isset($resolvedClientId) && $resolvedClientId === $c->client_id) selected @endif>
