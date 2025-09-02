@@ -94,7 +94,7 @@
               Belum ada voucher untuk lokasi ini.
             </div>
           @else
-            <label class="block text-sm font-medium mb-1 mt-3">Voucher</label>
+            <label class="block text-sm font-medium mb-1">Voucher</label>
             <select id="voucherSelect" name="voucher_id"
                     class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
                     @if(empty($resolvedClientId)) disabled @endif required>
