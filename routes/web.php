@@ -12,6 +12,10 @@ use App\Http\Controllers\AdminReportController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminHotspotUsersController;
 use App\Http\Controllers\AdminUserController;
+use App\Http\Controllers\ContactController;
+use App\Http\Controllers\OrderTrackingController;
+use App\Http\Controllers\AgreementController;
+use App\Http\Controllers\PrivacyController;
 
 /**
  * Public
@@ -23,6 +27,16 @@ Route::get('/', function () {
 Route::get('/hotspot', [HotspotController::class, 'index'])->name('hotspot.index');
 Route::get('/hotspot/order/{orderId}', [HotspotController::class, 'orderView'])->name('hotspot.order');
 Route::get('/payments/return', [ReturnController::class, 'show'])->name('payments.return');
+
+Route::get('/contact', [ContactController::class, 'create'])->name('contact.create');
+Route::post('/contact', [ContactController::class, 'store'])->name('contact.store');
+
+Route::get('/orders/track', [OrderTrackingController::class, 'index'])->name('orders.track');
+Route::post('/orders/track/lookup', [OrderTrackingController::class, 'lookup'])->name('orders.lookup');
+
+Route::get('/privacy', [PrivacyController::class, 'show'])->name('privacy.show');
+Route::get('/agreement', [AgreementController::class, 'show'])->name('agreement.show');
+
 
 /**
  * Admin Auth

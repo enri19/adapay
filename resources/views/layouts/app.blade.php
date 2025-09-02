@@ -98,7 +98,7 @@
         $showBuy = !request()->is('hotspot');
       @endphp
       <div class="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
-        <a href="{{ url('/hotspot') }}" class="flex items-center gap-2">
+        <a href="{{ url('/') }}" class="flex items-center gap-2">
           <img src="{{ asset('images/logo.png') }}"
               alt="{{ config('app.name', 'Hotspot Portal') }}"
               class="h-8 w-auto object-contain"
@@ -129,10 +129,20 @@
       @yield('content')
     </main>
 
-    <footer class="py-8 text-center text-xs text-gray-500">
-      &copy; {{ date('Y') }} {{ config('app.name', 'Hotspot Portal') }}. All rights reserved.
+    <footer class="py-8 text-xs text-gray-500 border-t bg-white/70 backdrop-blur">
+      <div class="max-w-3xl mx-auto px-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          &copy; {{ date('Y') }} {{ config('app.name', 'Hotspot Portal') }}. All rights reserved.
+        </div>
+        <nav class="flex items-center gap-3">
+          <a href="{{ route('agreement.show') }}" class="underline text-sky-700 hover:text-sky-900">Perjanjian Layanan</a>
+          <span class="text-gray-300">•</span>
+          <a href="{{ route('privacy.show') }}" class="underline text-sky-700 hover:text-sky-900">Kebijakan Privasi</a>
+        </nav>
+      </div>
     </footer>
 
+    @include('partials.cookie-consent')
     @stack('scripts')
   </body>
 </html>
