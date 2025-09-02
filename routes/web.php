@@ -14,6 +14,7 @@ use App\Http\Controllers\AdminHotspotUsersController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\OrderTrackingController;
+use App\Http\Controllers\OrderDemoController;
 use App\Http\Controllers\AgreementController;
 use App\Http\Controllers\PrivacyController;
 

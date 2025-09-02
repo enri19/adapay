@@ -52,8 +52,35 @@
       </div>
     </div>
 
-    <form id="frm" class="space-y-3" onsubmit="return startCheckout(event)" novalidate>
+    @php
+      $isBaseHost = strtolower(request()->getHost()) === 'pay.adanih.info';
+    @endphp
+
+    <form id="frm" class="space-y-3" onsubmit="return startCheckout(event)" novalidate
+      data-base-host="{{ $isBaseHost ? '1' : '0' }}">
       <input type="hidden" id="client_id" name="client_id" value="{{ $resolvedClientId ?? 'DEFAULT' }}">
+
+      @if ($isBaseHost)
+        <div class="subcard">
+          <div class="subcard-hd">Pilih Client</div>
+          <div class="subcard-bd">
+            {{-- Jika kamu kirim $clients dari controller, pakai <select>. Kalau tidak, pakai <input>. --}}
+            @if(isset($clients) && count($clients))
+              <label class="block text-sm font-medium mb-1">Client</label>
+              <select id="clientSelect" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" required>
+                @foreach($clients as $c)
+                  <option value="{{ $c->code }}">{{ $c->name ?? $c->code }}</option>
+                @endforeach
+              </select>
+            @else
+              <label class="block text-sm font-medium mb-1">Client</label>
+              <input id="clientInput" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
+                    placeholder="Mis. DEFAULT atau C1" value="{{ old('client_id','DEFAULT') }}" required>
+              <p class="text-xs text-gray-500 mt-1">Atau tambahkan <code>?client=DEFAULT</code> di URL.</p>
+            @endif
+          </div>
+        </div>
+      @endif
 
       {{-- Subcard: Voucher --}}
       <div class="subcard">
@@ -200,14 +227,58 @@
     }
   }
 
-  function getClientIdFromHost(){
-    const parts = location.hostname.split('.');
-    if (parts.length > 2) {
-      return (parts[0] || 'DEFAULT').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12) || 'DEFAULT';
-    }
-    const q = new URLSearchParams(location.search).get('client') || 'DEFAULT';
-    return q.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);
+  // function getClientIdFromHost(){
+  //   const parts = location.hostname.split('.');
+  //   if (parts.length > 2) {
+  //     return (parts[0] || 'DEFAULT').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12) || 'DEFAULT';
+  //   }
+  //   const q = new URLSearchParams(location.search).get('client') || 'DEFAULT';
+  //   return q.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);
+  // }
+
+  // --- NEW: helpers untuk client id ---
+  function sanitizeClientId(s){
+    return (String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12) || 'DEFAULT');
   }
+  function isBaseHost(){
+    return location.hostname.toLowerCase() === 'pay.adanih.info';
+  }
+  function getResolvedClientId(){
+    // Jika BUKAN base host → pakai subdomain pertama sebagai client (c1.pay.adanih.info)
+    if (!isBaseHost()){
+      var parts = location.hostname.split('.');
+      if (parts.length > 3) { // contoh: c1.pay.adanih.info
+        return sanitizeClientId(parts[0]);
+      }
+    }
+    // Base host atau tidak ada subdomain → coba query ?client
+    var q = new URLSearchParams(location.search).get('client');
+    if (q) return sanitizeClientId(q);
+
+    // Kalau base host, baca dari picker
+    var sel = document.getElementById('clientSelect');
+    if (sel) return sanitizeClientId(sel.value);
+    var inp = document.getElementById('clientInput');
+    if (inp) return sanitizeClientId(inp.value);
+
+    return 'DEFAULT';
+  }
+
+  // === on DOM ready: set hidden client_id & update saat picker berubah ===
+  document.addEventListener('DOMContentLoaded', function(){
+    var hid = document.getElementById('client_id');
+    if (hid) hid.value = getResolvedClientId();
+
+    // Update otomatis kalau user ganti client (hanya base host)
+    var sel = document.getElementById('clientSelect');
+    if (sel) sel.addEventListener('change', function(){
+      if (hid) hid.value = getResolvedClientId();
+    });
+    var inp = document.getElementById('clientInput');
+    if (inp) ['input','blur'].forEach(ev => inp.addEventListener(ev, function(){
+      if (hid) hid.value = getResolvedClientId();
+    }));
+  });
 
   function errElFor(input){
     const errId = (input?.id || '').replace(/^fld/, 'err');

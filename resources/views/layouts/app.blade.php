@@ -106,11 +106,21 @@
           <span class="font-semibold">{{ config('app.name', 'Hotspot Portal') }}</span>
         </a>
 
+        @php
+          $isBaseHost = strtolower(request()->getHost()) === 'pay.adanih.info';
+        @endphp
+
         {{-- TANPA toggle bar; tombol selalu ada kecuali di /hotspot --}}
         @if ($showBuy)
-          <a href="{{ url('/hotspot') }}" class="btn btn--primary">Beli Voucher</a>
+          @if ($isBaseHost)
+            <div class="flex items-center gap-2">
+              <a href="{{ url('/hotspot') }}" class="btn btn--primary">Beli Voucher</a>
+              <a href="{{ route('hotspot.order.demo') }}" class="btn btn--ghost">Coba Demo</a>
+            </div>
+          @else
+            <a href="{{ url('/hotspot') }}" class="btn btn--primary">Beli Voucher</a>
+          @endif
         @endif
-      </div>
     </header>
 
     <main class="max-w-3xl mx-auto px-4 py-6">
