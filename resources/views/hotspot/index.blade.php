@@ -71,8 +71,7 @@
               </div>
             @else
               <label class="block text-sm font-medium mb-1">Client</label>
-              <select id="clientSelect"
-                      class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200">
+              <select id="clientSelect" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200">
                 @foreach($clients as $c)
                   <option value="{{ $c->client_id }}"
                     @if(isset($resolvedClientId) && $resolvedClientId === $c->client_id) selected @endif>
@@ -376,6 +375,11 @@
         e.preventDefault(); e.stopPropagation(); if (e.stopImmediatePropagation) e.stopImmediatePropagation();
         const newCid = sanitizeClientId(selClient.value || 'DEFAULT');
         fetchVouchers(newCid);
+
+        const url = new URL(location.href);
+        url.searchParams.set('client', cid);
+        history.replaceState(null, '', url.toString());
+        
         return false;
       };
       selClient.addEventListener('change', handleClientChange, true); // capture=true
