@@ -60,31 +60,29 @@
       data-base-host="{{ $isBaseHost ? '1' : '0' }}">
       <input type="hidden" id="client_id" name="client_id" value="{{ $resolvedClientId ?? 'DEFAULT' }}">
 
-      {{-- Pilih Client (muncul hanya di base host) --}}
-      @if (!empty($isBaseHost) && $isBaseHost)
-        <div class="subcard">
-          <div class="subcard-hd">Pilih Client</div>
-          <div class="subcard-bd">
-            @if($clients->isEmpty())
-              <div class="p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded">
-                Belum ada client aktif. Hubungi admin.
-              </div>
-            @else
-              <label class="block text-sm font-medium mb-1">Client</label>
-              <select id="clientSelect" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200">
-                {{-- placeholder tidak punya value, jadi tidak terpilih sebagai client --}}
-                <option value="" disabled @if(empty($resolvedClientId)) selected @endif>— Pilih Client —</option>
-                @foreach($clients as $c)
-                  <option value="{{ $c->client_id }}"
+      {{-- Picker Client (tampil hanya di base host) --}}
+      @if(!empty($isBaseHost) && $isBaseHost)
+        <label class="block text-sm font-medium mb-1">Pilih Client</label>
+        <select id="clientSelect" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" autocomplete="off">
+          {{-- Placeholder: terpilih saat belum ada client --}}
+          <option value="" disabled @if(empty($resolvedClientId)) selected @endif>— Pilih Client —</option>
+
+          @foreach($clients as $c)
+            <option value="{{ $c->client_id }}"
+                    data-slug="{{ $c->slug }}"
                     @if(!empty($resolvedClientId) && $resolvedClientId === $c->client_id) selected @endif>
-                    {{ $c->name }} ({{ $c->client_id }})
-                  </option>
-                @endforeach
-              </select>
-              <p class="text-xs text-gray-500 mt-1">Ganti client akan memuat ulang paket/voucher untuk client tersebut.</p>
-            @endif
-          </div>
-        </div>
+              {{ $c->name }} ({{ $c->client_id }})
+            </option>
+          @endforeach
+        </select>
+
+        {{-- Hidden untuk ikut terkirim saat checkout (kosong jika belum pilih) --}}
+        <input type="hidden" id="client_id" name="client_id" value="{{ $resolvedClientId ?? '' }}">
+
+        <p class="text-xs text-gray-500 mt-1">Pilih client terlebih dahulu untuk menampilkan daftar voucher.</p>
+      @else
+        {{-- Mode subdomain: tidak perlu picker, tapi tetap kirim client_id --}}
+        <input type="hidden" id="client_id" name="client_id" value="{{ $resolvedClientId ?? '' }}">
       @endif
 
       {{-- Subcard: Voucher --}}
@@ -96,13 +94,12 @@
               Belum ada voucher untuk lokasi ini.
             </div>
           @else
-            <label class="block text-sm font-medium mb-1">Voucher</label>
-            <select name="voucher_id" id="voucherSelect"
-                    class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" required>
+            <label class="block text-sm font-medium mb-1 mt-3">Voucher</label>
+            <select id="voucherSelect" name="voucher_id"
+                    class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
+                    @if(empty($resolvedClientId)) disabled @endif required>
               @foreach($vouchers as $v)
-                <option value="{{ $v->id }}"
-                        data-name="{{ $v->name }}"
-                        data-price="{{ (int)$v->price }}">
+                <option value="{{ $v->id }}" data-name="{{ $v->name }}" data-price="{{ (int)$v->price }}">
                   {{ $v->name }} — Rp{{ number_format($v->price,0,',','.') }}
                 </option>
               @endforeach
@@ -197,10 +194,12 @@
 
       <div id="payErr" class="text-xs text-red-600 hidden"></div>
 
-      <button id="payBtn" type="submit" class="btn btn--primary" {{ $vouchers->isEmpty() ? 'disabled' : '' }}>
+      <button id="payBtn" type="submit" class="btn btn--primary"
+        @if(empty($resolvedClientId) || $vouchers->isEmpty()) disabled @endif>
         <span class="btn__label">Bayar</span>
         <span class="spinner hidden" aria-hidden="true"></span>
       </button>
+
 
       <div class="text-xs text-gray-500">
         Dengan melanjutkan, kamu menyetujui
