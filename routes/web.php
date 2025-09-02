@@ -27,6 +27,7 @@ Route::get('/', function () {
 
 Route::get('/hotspot', [HotspotController::class, 'index'])->name('hotspot.index');
 Route::get('/hotspot/order/{orderId}', [HotspotController::class, 'orderView'])->name('hotspot.order');
+Route::get('/hotspot/order/demo', [OrderDemoController::class, 'show'])->name('hotspot.order.demo');
 Route::get('/payments/return', [ReturnController::class, 'show'])->name('payments.return');
 
 Route::get('/contact', [ContactController::class, 'create'])->name('contact.create');
@@ -37,7 +38,6 @@ Route::post('/orders/track/lookup', [OrderTrackingController::class, 'lookup'])-
 
 Route::get('/privacy', [PrivacyController::class, 'show'])->name('privacy.show');
 Route::get('/agreement', [AgreementController::class, 'show'])->name('agreement.show');
-
 
 /**
  * Admin Auth
