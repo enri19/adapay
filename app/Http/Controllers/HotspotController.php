@@ -110,14 +110,13 @@ class HotspotController extends Controller
       'client_id'  => 'nullable|string|max:32',
     ]);
 
-    // Tentukan client secara tegas:
+    // --- RESOLVE CLIENT SECARA TEGAS ---
     $host       = strtolower($request->getHost());
     $isBaseHost = ($host === 'pay.adanih.info');
 
-    // 1) Coba pakai client_id dari payload (boleh client_id atau slug)
+    // 1) Utamakan client_id dari payload (boleh client_id atau slug)
     $clientFromPayload = strtoupper(preg_replace('/[^A-Z0-9]/', '', (string)($data['client_id'] ?? '')));
     $clientId = null;
-
     if ($clientFromPayload !== '') {
         $row = DB::table('clients')
             ->where('is_active', 1)
@@ -132,21 +131,21 @@ class HotspotController extends Controller
         }
     }
 
-    // 2) Jika belum ketemu, fallback ke resolver (subdomain / ?client)
+    // 2) Fallback ke resolver (subdomain / ?client)
     if (!$clientId) {
         $clientId = \App\Support\ClientResolver::resolve($request);
     }
 
-    // --- Pastikan voucher memang milik client ini ---
+    // --- Validasi voucher milik client ---
     $voucher = \App\Models\HotspotVoucher::query()
         ->where('id', (int)$data['voucher_id'])
-        ->forClient($clientId)       // scope-mu untuk filter per client
+        ->forClient($clientId)
         ->where('is_active', true)
         ->first();
 
     if (!$voucher) {
         return response()->json([
-          'error'   => 'INVALID_VOUCHER',
+          'error' => 'INVALID_VOUCHER',
           'message' => 'Voucher tidak tersedia untuk lokasi ini.'
         ], 422);
     }
@@ -289,30 +288,24 @@ class HotspotController extends Controller
         'order_url' => $orderUrl,
       ]);
 
-      $conn = config('queue.default', 'sync');
       $dispatched = false;
 
+      // PREFER: jalankan setelah response terkirim
       try {
-        if ($conn !== 'sync') {
-          \App\Jobs\SendWhatsAppMessage::dispatch($to, $msg, $orderId)->onQueue('wa');
-          $dispatched = true;
-        }
+        \App\Jobs\SendWhatsAppMessage::dispatchAfterResponse($to, $msg, $orderId);
+        $dispatched = true;
       } catch (\Throwable $e) {
-        \Log::warning('wa.queue.dispatch_failed', ['order_id'=>$orderId,'err'=>$e->getMessage()]);
+        \Log::warning('wa.after_response.failed', ['order_id'=>$orderId,'err'=>$e->getMessage()]);
       }
 
+      // FALLBACK: pakai queue normal (non-blocking)
       if (!$dispatched) {
         try {
-          \App\Jobs\SendWhatsAppMessage::dispatchAfterResponse($to, $msg, $orderId);
+          \App\Jobs\SendWhatsAppMessage::dispatch($to, $msg, $orderId)->onQueue('wa');
           $dispatched = true;
         } catch (\Throwable $e) {
-          \Log::warning('wa.after_response.failed', ['order_id'=>$orderId,'err'=>$e->getMessage()]);
+          \Log::warning('wa.queue.dispatch_failed', ['order_id'=>$orderId,'err'=>$e->getMessage()]);
         }
-      }
-
-      if (!$dispatched) {
-        app(\App\Services\WhatsAppGateway::class)->send($to, $msg);
-        $dispatched = true;
       }
 
       // Stempel hanya kalau ada upaya kirim
