@@ -371,17 +371,33 @@
 
       // handler change di CAPTURE phase agar bisa stop listener lain
       const handleClientChange = function(e){
-        // cegah listener lama yang mungkin masih terpasang
-        e.preventDefault(); e.stopPropagation(); if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        // cegah handler lama yang mungkin masih nempel
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+
         const newCid = sanitizeClientId(selClient.value || 'DEFAULT');
+
+        // sinkronkan hidden input agar ikut terkirim saat checkout
+        if (typeof hidClient !== 'undefined' && hidClient) {
+          hidClient.value = newCid;
+        }
+
+        // muat ulang daftar voucher tanpa reload halaman
         fetchVouchers(newCid);
 
-        // const url = new URL(location.href);
-        // url.searchParams.set('client', cid);
-        // history.replaceState(null, '', url.toString());
-        
+        // perbarui URL (?client=...) tanpa reload supaya konsisten dengan resolver lain
+        const url = new URL(window.location.href);
+        if (newCid && newCid !== 'DEFAULT') {
+          url.searchParams.set('client', newCid);
+        } else {
+          url.searchParams.delete('client');
+        }
+        window.history.replaceState(null, '', url.toString());
+
         return false;
       };
+
       selClient.addEventListener('change', handleClientChange, true); // capture=true
       selClient.addEventListener('input',  handleClientChange, true);
       selClient.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); }});

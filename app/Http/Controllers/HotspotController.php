@@ -288,24 +288,30 @@ class HotspotController extends Controller
         'order_url' => $orderUrl,
       ]);
 
+      $conn = config('queue.default', 'sync');
       $dispatched = false;
 
-      // PREFER: jalankan setelah response terkirim
       try {
-        \App\Jobs\SendWhatsAppMessage::dispatchAfterResponse($to, $msg, $orderId);
-        $dispatched = true;
-      } catch (\Throwable $e) {
-        \Log::warning('wa.after_response.failed', ['order_id'=>$orderId,'err'=>$e->getMessage()]);
-      }
-
-      // FALLBACK: pakai queue normal (non-blocking)
-      if (!$dispatched) {
-        try {
+        if ($conn !== 'sync') {
           \App\Jobs\SendWhatsAppMessage::dispatch($to, $msg, $orderId)->onQueue('wa');
           $dispatched = true;
-        } catch (\Throwable $e) {
-          \Log::warning('wa.queue.dispatch_failed', ['order_id'=>$orderId,'err'=>$e->getMessage()]);
         }
+      } catch (\Throwable $e) {
+        \Log::warning('wa.queue.dispatch_failed', ['order_id'=>$orderId,'err'=>$e->getMessage()]);
+      }
+
+      if (!$dispatched) {
+        try {
+          \App\Jobs\SendWhatsAppMessage::dispatchAfterResponse($to, $msg, $orderId);
+          $dispatched = true;
+        } catch (\Throwable $e) {
+          \Log::warning('wa.after_response.failed', ['order_id'=>$orderId,'err'=>$e->getMessage()]);
+        }
+      }
+
+      if (!$dispatched) {
+        app(\App\Services\WhatsAppGateway::class)->send($to, $msg);
+        $dispatched = true;
       }
 
       // Stempel hanya kalau ada upaya kirim
