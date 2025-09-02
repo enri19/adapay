@@ -23,31 +23,39 @@ class HotspotController extends Controller
     // resolve bawaan (subdomain / ?client / default)
     $clientId = \App\Support\ClientResolver::resolve($request);
 
-    // daftar client aktif hanya untuk base host
     $clients = collect();
     if ($isBaseHost) {
-      // ambil client aktif (pakai DB langsung supaya tidak tergantung model)
       $clients = DB::table('clients')
         ->where('is_active', 1)
         ->orderBy('name')
         ->get(['client_id','name','slug']);
 
-      // kalau ada ?client (boleh client_id atau slug), pakai itu
       $q = trim((string) $request->query('client', ''));
       if ($q !== '') {
         $match = $clients->first(function($c) use ($q) {
           return strcasecmp($c->client_id, $q) === 0 || strcasecmp((string) $c->slug, $q) === 0;
         });
-        if ($match) {
-          $clientId = $match->client_id;
-        }
-      }
-
-      // fallback: kalau resolver masih 'DEFAULT' atau kosong, pilih client aktif pertama
-      if (($clientId === 'DEFAULT' || empty($clientId)) && $clients->count() > 0) {
-        $clientId = $clients->first()->client_id;
+        if ($match) $clientId = $match->client_id;
       }
     }
+
+    // kalau base host & belum ada pilihan ⇒ biarkan null supaya select placeholder aktif
+    $selectedClientId = $clientId;
+    if ($isBaseHost && ($clientId === 'DEFAULT' || empty($clientId))) {
+      $selectedClientId = null;
+    }
+
+    // load vouchers hanya kalau sudah ada client terpilih
+    $vouchers = $selectedClientId
+      ? \App\Models\HotspotVoucher::listForPortal($selectedClientId)
+      : collect();
+
+    return view('hotspot.index', [
+      'vouchers'         => $vouchers,
+      'resolvedClientId' => $selectedClientId, // <— bisa null
+      'isBaseHost'       => $isBaseHost,
+      'clients'          => $clients,
+    ]);
 
     // load vouchers sesuai client terpilih
     $vouchers = \App\Models\HotspotVoucher::listForPortal($clientId);

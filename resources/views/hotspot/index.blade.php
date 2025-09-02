@@ -72,9 +72,11 @@
             @else
               <label class="block text-sm font-medium mb-1">Client</label>
               <select id="clientSelect" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200">
+                {{-- placeholder tidak punya value, jadi tidak terpilih sebagai client --}}
+                <option value="" disabled @if(empty($resolvedClientId)) selected @endif>— Pilih Client —</option>
                 @foreach($clients as $c)
                   <option value="{{ $c->client_id }}"
-                    @if(isset($resolvedClientId) && $resolvedClientId === $c->client_id) selected @endif>
+                    @if(!empty($resolvedClientId) && $resolvedClientId === $c->client_id) selected @endif>
                     {{ $c->name }} ({{ $c->client_id }})
                   </option>
                 @endforeach
@@ -446,6 +448,11 @@
   window.startCheckout = async function(e){
     e.preventDefault();
     if (errBox){ errBox.classList.add('hidden'); errBox.textContent=''; }
+
+    if (isBaseHost() && !cid){
+      if (errBox){ errBox.textContent = 'Silakan pilih client terlebih dahulu.'; errBox.classList.remove('hidden'); }
+      return false;
+    }
 
     const nameMsg = validateName(nameInput);
     if (nameMsg){ showFieldError(nameInput, nameMsg); return false; } else { showFieldError(nameInput, null); }
