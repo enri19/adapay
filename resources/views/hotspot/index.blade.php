@@ -218,7 +218,22 @@
 @push('scripts')
 <script>
 (function(){
-  // ========= Utils umum =========
+  // ========= Utils =========
+  const formEl     = document.getElementById('frm');
+  const payBtn     = document.getElementById('payBtn');
+  const errBox     = document.getElementById('payErr');
+  const hidClient  = document.getElementById('client_id');
+  const selClient  = document.getElementById('clientSelect');  // hanya ada di base host
+  const selVoucher = document.getElementById('voucherSelect');
+  const nameInput  = document.getElementById('fldName');
+  const phoneInput = document.getElementById('fldPhone');
+  const sumName    = document.getElementById('sumVoucherName');
+  const sumTotal   = document.getElementById('sumTotal');
+  const sumMethod  = document.getElementById('sumMethod');
+  const noVoucher  = document.getElementById('noVoucherBox');
+
+  const VOUCHERS_URL = "{{ url('/api/hotspot/vouchers') }}"; // GET ?client=CLIENT_ID
+
   function setLoading(btn,on,txt){
     if(!btn) return;
     const label = btn.querySelector('.btn__label');
@@ -240,39 +255,19 @@
     return 'Rp' + x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   }
 
-  // ========= Elemen DOM =========
-  const formEl     = document.getElementById('frm');
-  const payBtn     = document.getElementById('payBtn');
-  const errBox     = document.getElementById('payErr');
-  const hidClient  = document.getElementById('client_id');
-  const selClient  = document.getElementById('clientSelect');  // hanya ada di base host
-  const selVoucher = document.getElementById('voucherSelect');
-  const nameInput  = document.getElementById('fldName');
-  const phoneInput = document.getElementById('fldPhone');
-
-  const sumName    = document.getElementById('sumVoucherName');
-  const sumTotal   = document.getElementById('sumTotal');
-  const sumMethod  = document.getElementById('sumMethod');
-  const noVoucher  = document.getElementById('noVoucherBox');
-
-  // pakai URL absolut biar aman walau route name belum diset
-  const VOUCHERS_URL = "{{ url('/api/hotspot/vouchers') }}";
-
   // ========= Client resolver =========
   function getResolvedClientId(){
-    // *.pay.adanih.info -> ambil subdomain
     if (!isBaseHost()){
       const parts = location.hostname.split('.');
-      if (parts.length > 3 && parts[0]) return sanitizeClientId(parts[0]);
+      if (parts.length > 3 && parts[0]) return sanitizeClientId(parts[0]); // c1.pay.adanih.info -> C1
     }
-    // base host -> ambil dari select (kalau ada) atau dari query ?client
     if (selClient && selClient.value) return sanitizeClientId(selClient.value);
     const q = new URLSearchParams(location.search).get('client');
     if (q) return sanitizeClientId(q);
     return sanitizeClientId(hidClient ? hidClient.value : 'DEFAULT');
   }
 
-  // ========= Validasi field =========
+  // ========= Validasi =========
   function errElFor(input){ const id=(input?.id||'').replace(/^fld/,'err'); return document.getElementById(id); }
   function showFieldError(input,msg){
     const err=errElFor(input); if(!err||!input) return;
@@ -317,7 +312,7 @@
     if (sumMethod) sumMethod.textContent = currentMethod();
   }
 
-  // ========= Voucher AJAX (tanpa jQuery) =========
+  // ========= Voucher AJAX =========
   function rebuildVouchers(list){
     if (!selVoucher) return;
     selVoucher.innerHTML = '';
@@ -362,11 +357,31 @@
     }
   }
 
-  // ========= Event handlers =========
-  // set hidden client id saat load
+  // ========= Init =========
   document.addEventListener('DOMContentLoaded', function(){
+    // set hidden client id awal
     const cid = getResolvedClientId();
     if (hidClient) hidClient.value = cid;
+
+    // nonaktifkan inline onchange lama yang bikin reload
+    if (selClient){
+      try {
+        if (selClient.hasAttribute('onchange')) selClient.removeAttribute('onchange');
+        selClient.onchange = null;
+      } catch(e){}
+
+      // handler change di CAPTURE phase agar bisa stop listener lain
+      const handleClientChange = function(e){
+        // cegah listener lama yang mungkin masih terpasang
+        e.preventDefault(); e.stopPropagation(); if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        const newCid = sanitizeClientId(selClient.value || 'DEFAULT');
+        fetchVouchers(newCid);
+        return false;
+      };
+      selClient.addEventListener('change', handleClientChange, true); // capture=true
+      selClient.addEventListener('input',  handleClientChange, true);
+      selClient.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); }});
+    }
 
     if (nameInput){
       nameInput.addEventListener('input', ()=>showFieldError(nameInput, validateName(nameInput)));
@@ -377,17 +392,11 @@
       phoneInput.addEventListener('blur',  ()=>showFieldError(phoneInput, validatePhone(phoneInput).msg));
     }
     if (selVoucher){ selVoucher.addEventListener('change', updateSummary); }
-    if (selClient){  // base host: ganti client tanpa reload
-      selClient.addEventListener('change', ()=>{
-        const newCid = sanitizeClientId(selClient.value || 'DEFAULT');
-        fetchVouchers(newCid);
-      });
-    }
-    // init summary
+
     updateSummary();
   });
 
-  // metode pembayaran (klik kartu)
+  // ========= Metode pembayaran =========
   document.addEventListener('DOMContentLoaded', function(){
     function setChecked(card){
       document.querySelectorAll('.pm-card').forEach(c=>{
@@ -418,13 +427,11 @@
     e.preventDefault();
     if (errBox){ errBox.classList.add('hidden'); errBox.textContent=''; }
 
-    // Validasi
     const nameMsg = validateName(nameInput);
     if (nameMsg){ showFieldError(nameInput, nameMsg); return false; } else { showFieldError(nameInput, null); }
     const { msg: phoneMsg, norm: phoneNorm } = validatePhone(phoneInput);
     if (phoneMsg){ showFieldError(phoneInput, phoneMsg); return false; } else { showFieldError(phoneInput, null); }
 
-    // Payload
     const cid = getResolvedClientId();
     if (hidClient) hidClient.value = cid;
 
