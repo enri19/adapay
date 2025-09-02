@@ -219,22 +219,8 @@
 @push('scripts')
 <script>
 (function(){
-  // ========= Utils =========
-  const formEl     = document.getElementById('frm');
-  const payBtn     = document.getElementById('payBtn');
-  const errBox     = document.getElementById('payErr');
-  const hidClient  = document.getElementById('client_id');
-  const selClient  = document.getElementById('clientSelect');  // hanya ada di base host
-  const selVoucher = document.getElementById('voucherSelect');
-  const nameInput  = document.getElementById('fldName');
-  const phoneInput = document.getElementById('fldPhone');
-  const sumName    = document.getElementById('sumVoucherName');
-  const sumTotal   = document.getElementById('sumTotal');
-  const sumMethod  = document.getElementById('sumMethod');
-  const noVoucher  = document.getElementById('noVoucherBox');
-
-  const VOUCHERS_URL = "{{ url('/api/hotspot/vouchers') }}"; // GET ?client=CLIENT_ID
-
+  // ========= Helpers umum =========
+  const $, $$ = (s,sc)=> (sc||document).querySelector(s), (s,sc)=>[].slice.call((sc||document).querySelectorAll(s));
   function setLoading(btn,on,txt){
     if(!btn) return;
     const label = btn.querySelector('.btn__label');
@@ -247,33 +233,46 @@
       label.textContent = (on && txt) ? txt : btn.__orig;
     }
   }
-  function sanitizeClientId(s){
-    return (String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12) || 'DEFAULT');
-  }
+  function sanitizeClientId(s){ return (String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12)); }
   function isBaseHost(){ return location.hostname.toLowerCase() === 'pay.adanih.info'; }
-  function rupiah(n){
-    const x = Math.max(0, parseInt(n||0,10));
-    return 'Rp' + x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  }
+  function rupiah(n){ const x=Math.max(0,parseInt(n||0,10)); return 'Rp' + x.toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
+
+  // ========= Elemen utama =========
+  const formEl     = $('#frm');
+  const selClient  = $('#clientSelect');     // hanya ada di base host
+  const selVoucher = $('#voucherSelect');    // SELALU ada (disabled jika kosong)
+  const hidClient  = $('#client_id');        // hidden input untuk payload
+  const payBtn     = $('#payBtn');
+  const errBox     = $('#payErr');
+  const noVoucher  = $('#noVoucherBox');     // box "Belum ada voucher..." (opsional)
+
+  const nameInput  = $('#fldName');
+  const phoneInput = $('#fldPhone');
+  const emailInput = formEl ? formEl.querySelector('[name="email"]') : null;
+
+  const sumName    = $('#sumVoucherName');
+  const sumTotal   = $('#sumTotal');
+  const sumMethod  = $('#sumMethod');
+
+  const API_VOUCHERS_URL = "{{ url('/api/hotspot/vouchers') }}";   // GET ?client=...
+  const API_CHECKOUT_URL = "{{ url('/api/hotspot/checkout') }}";   // POST
 
   // ========= Client resolver =========
   function getResolvedClientId(){
     if (!isBaseHost()){
       const parts = location.hostname.split('.');
       if (parts.length > 3 && parts[0]) return sanitizeClientId(parts[0]); // c1.pay.adanih.info -> C1
+      return '';
     }
-    if (selClient && selClient.value) return sanitizeClientId(selClient.value);
-    const q = new URLSearchParams(location.search).get('client');
-    if (q) return sanitizeClientId(q);
-    return sanitizeClientId(hidClient ? hidClient.value : 'DEFAULT');
+    return selClient && selClient.value ? sanitizeClientId(selClient.value) : '';
   }
 
-  // ========= Validasi =========
+  // ========= Validasi input =========
   function errElFor(input){ const id=(input?.id||'').replace(/^fld/,'err'); return document.getElementById(id); }
   function showFieldError(input,msg){
     const err=errElFor(input); if(!err||!input) return;
     if(msg){ err.textContent=msg; err.classList.remove('hidden'); input.classList.add('border-red-500','focus:ring-red-200'); input.setAttribute('aria-invalid','true'); }
-    else { err.textContent=''; err.classList.add('hidden'); input.classList.remove('border-red-500','focus:ring-red-200'); input.removeAttribute('aria-invalid'); }
+    else   { err.textContent='';  err.classList.add('hidden');   input.classList.remove('border-red-500','focus:ring-red-200'); input.removeAttribute('aria-invalid'); }
   }
   function validateName(input){
     const v=String(input?.value||'').trim();
@@ -299,7 +298,7 @@
     return {msg:'',norm};
   }
 
-  // ========= Ringkasan =========
+  // ========= Ringkasan UI =========
   function currentMethod(){
     const r=document.querySelector('.pm-radio:checked');
     return (r && (r.value||'').toUpperCase()) || 'QRIS';
@@ -317,7 +316,7 @@
   function rebuildVouchers(list){
     if (!selVoucher) return;
     selVoucher.innerHTML = '';
-    if (!list || !list.length){
+    if (!Array.isArray(list) || list.length===0){
       if (noVoucher) noVoucher.classList.remove('hidden');
       selVoucher.disabled = true;
       if (payBtn) payBtn.disabled = true;
@@ -335,7 +334,8 @@
     });
     selVoucher.disabled = false;
     if (payBtn) payBtn.disabled = false;
-    updateSummary();
+    // trigger update
+    selVoucher.dispatchEvent(new Event('change'));
   }
 
   async function fetchVouchers(cid){
@@ -347,64 +347,79 @@
       }
       if (payBtn) payBtn.disabled = true;
 
-      const url = VOUCHERS_URL + '?client=' + encodeURIComponent(cid);
-      const res = await fetch(url, { headers: { 'Accept':'application/json' } });
+      // GET utama
+      let res = await fetch(`${API_VOUCHERS_URL}?client=${encodeURIComponent(cid)}&client_id=${encodeURIComponent(cid)}`, {
+        headers: { 'Accept':'application/json' }
+      });
+      // fallback POST jika route GET tidak tersedia
+      if (!res.ok && (res.status===404 || res.status===405)) {
+        res = await fetch(API_VOUCHERS_URL, {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
+          body: JSON.stringify({ client: cid, client_id: cid })
+        });
+      }
       if (!res.ok) throw new Error('HTTP '+res.status);
       const json = await res.json();
-      rebuildVouchers((json && json.data) ? json.data : []);
+      const list = Array.isArray(json) ? json : (json.data || json.vouchers || json.items || []);
+      rebuildVouchers(list || []);
     }catch(e){
       console.error('Gagal memuat voucher:', e);
       rebuildVouchers([]);
     }
   }
 
-  // ========= Init =========
+  // ========= Init halaman =========
   document.addEventListener('DOMContentLoaded', function(){
-    // set hidden client id awal
-    const cid = getResolvedClientId();
-    if (hidClient) hidClient.value = cid;
+    // Base host tanpa pilihan → kunci UI, jangan pilih otomatis
+    if (isBaseHost() && (!selClient || !selClient.value)){
+      if (hidClient) hidClient.value = '';
+      if (selVoucher){ selVoucher.disabled = true; selVoucher.innerHTML=''; }
+      if (noVoucher) noVoucher.classList.remove('hidden');
+      if (payBtn) payBtn.disabled = true;
+    } else {
+      // Subdomain atau sudah ada pilihan dari server
+      const cid = getResolvedClientId();
+      if (hidClient) hidClient.value = cid;
+    }
 
-    // nonaktifkan inline onchange lama yang bikin reload
+    // Hapus handler inline lama (yang bikin reload)
     if (selClient){
-      try {
-        if (selClient.hasAttribute('onchange')) selClient.removeAttribute('onchange');
-        selClient.onchange = null;
-      } catch(e){}
+      if (selClient.hasAttribute('onchange')) selClient.removeAttribute('onchange');
+      selClient.onchange = null;
 
-      // handler change di CAPTURE phase agar bisa stop listener lain
       const handleClientChange = function(e){
-        // cegah handler lama yang mungkin masih nempel
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        e.preventDefault(); e.stopPropagation(); if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        const newCid = getResolvedClientId();
 
-        const newCid = sanitizeClientId(selClient.value || 'DEFAULT');
+        if (!newCid){ // placeholder dipilih
+          if (hidClient) hidClient.value = '';
+          if (selVoucher){ selVoucher.disabled = true; selVoucher.innerHTML=''; }
+          if (noVoucher) noVoucher.classList.remove('hidden');
+          if (payBtn) payBtn.disabled = true;
 
-        // sinkronkan hidden input agar ikut terkirim saat checkout
-        if (typeof hidClient !== 'undefined' && hidClient) {
-          hidClient.value = newCid;
+          const url = new URL(location.href);
+          url.searchParams.delete('client');
+          history.replaceState(null, '', url.toString());
+          return false;
         }
 
-        // muat ulang daftar voucher tanpa reload halaman
+        if (hidClient) hidClient.value = newCid;
         fetchVouchers(newCid);
 
-        // perbarui URL (?client=...) tanpa reload supaya konsisten dengan resolver lain
-        const url = new URL(window.location.href);
-        if (newCid && newCid !== 'DEFAULT') {
-          url.searchParams.set('client', newCid);
-        } else {
-          url.searchParams.delete('client');
-        }
-        window.history.replaceState(null, '', url.toString());
-
+        const url = new URL(location.href);
+        url.searchParams.set('client', newCid);
+        history.replaceState(null, '', url.toString());
         return false;
       };
 
-      selClient.addEventListener('change', handleClientChange, true); // capture=true
+      // pasang listener di capture phase agar mematikan listener lama
+      selClient.addEventListener('change', handleClientChange, true);
       selClient.addEventListener('input',  handleClientChange, true);
-      selClient.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); }});
+      selClient.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); }});
     }
 
+    // Validasi realtime
     if (nameInput){
       nameInput.addEventListener('input', ()=>showFieldError(nameInput, validateName(nameInput)));
       nameInput.addEventListener('blur',  ()=>showFieldError(nameInput, validateName(nameInput)));
@@ -413,15 +428,15 @@
       phoneInput.addEventListener('input', ()=>showFieldError(phoneInput, validatePhone(phoneInput).msg));
       phoneInput.addEventListener('blur',  ()=>showFieldError(phoneInput, validatePhone(phoneInput).msg));
     }
-    if (selVoucher){ selVoucher.addEventListener('change', updateSummary); }
 
+    // Ringkasan & metode
+    if (selVoucher) selVoucher.addEventListener('change', updateSummary);
+    // init ringkasan dari state awal server
     updateSummary();
-  });
 
-  // ========= Metode pembayaran =========
-  document.addEventListener('DOMContentLoaded', function(){
+    // metode pembayaran (klik kartu)
     function setChecked(card){
-      document.querySelectorAll('.pm-card').forEach(c=>{
+      $$('.pm-card').forEach(c=>{
         c.setAttribute('aria-checked','false');
         const r=c.querySelector('.pm-radio'); if(r) r.checked=false;
       });
@@ -429,9 +444,9 @@
       const radio=card.querySelector('.pm-radio'); if(radio) radio.checked=true;
       updateSummary();
     }
-    const current=document.querySelector('.pm-radio:checked');
+    const current=$('.pm-radio:checked');
     if (current){ const card=current.closest('.pm-card'); if(card) setChecked(card); }
-    document.querySelectorAll('.pay-methods').forEach(group=>{
+    $$('.pay-methods').forEach(group=>{
       group.addEventListener('click', e=>{
         const card=e.target.closest('.pm-card'); if(!card) return; setChecked(card);
       });
@@ -449,41 +464,55 @@
     e.preventDefault();
     if (errBox){ errBox.classList.add('hidden'); errBox.textContent=''; }
 
+    // Base host wajib pilih client dulu
+    const cid = getResolvedClientId();
     if (isBaseHost() && !cid){
       if (errBox){ errBox.textContent = 'Silakan pilih client terlebih dahulu.'; errBox.classList.remove('hidden'); }
       return false;
     }
 
-    const nameMsg = validateName(nameInput);
-    if (nameMsg){ showFieldError(nameInput, nameMsg); return false; } else { showFieldError(nameInput, null); }
-    const { msg: phoneMsg, norm: phoneNorm } = validatePhone(phoneInput);
-    if (phoneMsg){ showFieldError(phoneInput, phoneMsg); return false; } else { showFieldError(phoneInput, null); }
+    // Validasi field
+    const nmErr = validateName(nameInput); if (nmErr){ showFieldError(nameInput, nmErr); return false; } else { showFieldError(nameInput, null); }
+    const { msg: phErr, norm: phoneNorm } = validatePhone(phoneInput); if (phErr){ showFieldError(phoneInput, phErr); return false; } else { showFieldError(phoneInput, null); }
 
-    const cid = getResolvedClientId();
+    // Validasi voucher dipilih
+    if (!selVoucher || selVoucher.disabled || !selVoucher.value){
+      if (errBox){ errBox.textContent = 'Silakan pilih voucher terlebih dahulu.'; errBox.classList.remove('hidden'); }
+      return false;
+    }
+
     if (hidClient) hidClient.value = cid;
 
-    const voucherId = selVoucher ? Number(selVoucher.value) : null;
+    const voucherId = Number(selVoucher.value);
     const method = (document.querySelector('.pm-radio:checked')?.value || 'qris').toLowerCase();
+
     const payload = {
       voucher_id: voucherId,
       method: method,
       name: String(nameInput.value||'').trim(),
-      email: (formEl && formEl.querySelector('[name="email"]')) ? formEl.querySelector('[name="email"]').value || null : null,
+      email: emailInput ? (emailInput.value||null) : null,
       phone: phoneNorm || String(phoneInput.value||'').trim(),
       client_id: cid,
     };
 
     setLoading(payBtn, true, 'Memproses…');
-    try{
-      const res = await fetch('/api/hotspot/checkout', {
-        method:'POST',
-        headers:{'Content-Type':'application/json','Accept':'application/json'},
-        body: JSON.stringify(payload)
-      });
-      const text = await res.text();
-      let data; try{ data = JSON.parse(text); } catch{ throw new Error('RESP_INVALID: ' + text.slice(0,120)); }
 
-      if(!res.ok){
+    // Timeout 20s agar spinner tak nyangkut
+    const ctrl  = new AbortController();
+    const timer = setTimeout(()=>ctrl.abort(), 20000);
+
+    try{
+      const res = await fetch(API_CHECKOUT_URL, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json','Accept':'application/json' },
+        body: JSON.stringify(payload),
+        signal: ctrl.signal
+      });
+
+      const text = await res.text();
+      let data; try{ data = JSON.parse(text); }catch{ throw new Error('RESP_INVALID: ' + text.slice(0,120)); }
+
+      if (!res.ok){
         if (res.status === 422) {
           const errs = (data && data.errors) || {};
           if (errs.name && errs.name[0])  showFieldError(nameInput,  errs.name[0]);
@@ -503,13 +532,20 @@
       if(!orderId) throw new Error('Order ID tidak ditemukan.');
 
       setLoading(payBtn, true, 'Mengarahkan…');
-      window.location.href = '/hotspot/order/' + encodeURIComponent(orderId);
+      location.href = '/hotspot/order/' + encodeURIComponent(orderId);
       return false;
 
-    }catch(e){
+    } catch(e){
       setLoading(payBtn, false);
-      if (errBox){ errBox.textContent = e.message || 'Terjadi kesalahan.'; errBox.classList.remove('hidden'); }
+      if (errBox){
+        errBox.textContent = (e.name === 'AbortError')
+          ? 'Koneksi lambat atau server tidak merespons. Coba lagi.'
+          : (e.message || 'Terjadi kesalahan.');
+        errBox.classList.remove('hidden');
+      }
       return false;
+    } finally {
+      clearTimeout(timer);
     }
   };
 })();
