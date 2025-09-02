@@ -61,23 +61,28 @@
     <form id="frm" class="space-y-3" onsubmit="return startCheckout(event)" novalidate data-base-host="{{ $isBaseHost ? '1' : '0' }}">
       {{-- Picker Client (tampil hanya di base host) --}}
       @if(!empty($isBaseHost) && $isBaseHost)
-        <label class="block text-sm font-medium mb-1">Pilih Client</label>
-        <select id="clientSelect" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" autocomplete="off">
-          <option value="" disabled @if(empty($resolvedClientId)) selected @endif>— Pilih Client —</option>
-          @foreach($clients as $c)
-            <option value="{{ $c->client_id }}"
-                    data-slug="{{ $c->slug }}"
-                    @if(!empty($resolvedClientId) && $resolvedClientId === $c->client_id) selected @endif>
-              {{ $c->name }} ({{ $c->client_id }})
-            </option>
-          @endforeach
-        </select>
+      <div class="subcard">
+        <div class="subcard-hd">Pilih Mitra</div>
+        <div class="subcard-bd">
+          <label class="block text-sm font-medium mb-1">Mitra</label>
+          <select id="clientSelect" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" autocomplete="off">
+            <option value="" disabled @if(empty($resolvedClientId)) selected @endif>— Pilih Client —</option>
+            @foreach($clients as $c)
+              <option value="{{ $c->client_id }}"
+                      data-slug="{{ $c->slug }}"
+                      @if(!empty($resolvedClientId) && $resolvedClientId === $c->client_id) selected @endif>
+                {{ $c->name }} ({{ $c->client_id }})
+              </option>
+            @endforeach
+          </select>
+        </div>
+      </div>
       @endif
 
       {{-- Hidden client_id: satu saja, kosong jika belum pilih --}}
       <input type="hidden" id="client_id" name="client_id" value="{{ $resolvedClientId ?? '' }}">
 
-      {{-- Subcard: Voucher --}}
+      {{-- Subcard: Voucher (SELALU render select) --}}
       <div class="subcard">
         <div class="subcard-hd">Pilih Voucher</div>
         <div class="subcard-bd">
@@ -86,16 +91,22 @@
           <select id="voucherSelect" name="voucher_id"
                   class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
                   @if(empty($resolvedClientId)) disabled @endif required>
-            @foreach($vouchers as $v)
-              <option value="{{ $v->id }}" data-name="{{ $v->name }}" data-price="{{ (int)$v->price }}">
-                {{ $v->name }} — Rp{{ number_format($v->price,0,',','.') }}
-              </option>
-            @endforeach
+            @if(!empty($resolvedClientId))
+              @foreach($vouchers as $v)
+                <option value="{{ $v->id }}" data-name="{{ $v->name }}" data-price="{{ (int)$v->price }}">
+                  {{ $v->name }} — Rp{{ number_format($v->price,0,',','.') }}
+                </option>
+              @endforeach
+            @endif
           </select>
 
           <div id="noVoucherBox"
               class="mt-2 p-3 text-sm text-gray-600 border rounded bg-gray-50 @if(!empty($resolvedClientId) && $vouchers->count()) hidden @endif">
-            Belum ada voucher untuk client ini.
+            @if(empty($resolvedClientId))
+              Pilih client untuk menampilkan voucher.
+            @else
+              Belum ada voucher untuk client ini.
+            @endif
           </div>
         </div>
       </div>
@@ -191,7 +202,6 @@
         <span class="btn__label">Bayar</span>
         <span class="spinner hidden" aria-hidden="true"></span>
       </button>
-
 
       <div class="text-xs text-gray-500">
         Dengan melanjutkan, kamu menyetujui
@@ -301,33 +311,44 @@
 
   // ===== Voucher AJAX =====
   function rebuildVouchers(list){
-    const vSel = getVoucherSel();
+    const vSel = document.getElementById('voucherSelect');
     if (!vSel) return;
+
     vSel.innerHTML = '';
-    if (!Array.isArray(list) || list.length===0){
-      if (noVoucher) noVoucher.classList.remove('hidden');
+
+    if (!Array.isArray(list) || list.length === 0){
+      // kosong → kunci & ringkasan reset
       vSel.disabled = true;
       if (payBtn) payBtn.disabled = true;
-      updateSummary();
+      if (noVoucher) noVoucher.classList.remove('hidden');
+      if (sumName)  sumName.textContent  = '—';
+      if (sumTotal) sumTotal.textContent = 'Rp0';
       return;
     }
+
     if (noVoucher) noVoucher.classList.add('hidden');
 
-    // Tambah semua opsi
+    // placeholder supaya tidak auto-pilih
+    const ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = '— Pilih Voucher —';
+    ph.disabled = true;
+    ph.selected = true;
+    vSel.appendChild(ph);
+
+    // tambahkan opsi voucher
     for (const v of list){
-      const o=document.createElement('option');
-      o.value=v.id;
-      o.textContent=`${v.name} — ${rupiah(v.price)}`;
+      const o = document.createElement('option');
+      o.value = v.id;
+      o.textContent = `${v.name} — ${rupiah(v.price)}`;
       o.setAttribute('data-name', v.name);
       o.setAttribute('data-price', v.price);
       vSel.appendChild(o);
     }
-    vSel.disabled = false;
-    if (payBtn) payBtn.disabled = false;
 
-    // Pilih opsi pertama & update total
-    vSel.selectedIndex = 0;
-    vSel.dispatchEvent(new Event('change'));
+    vSel.disabled = false;
+    if (payBtn) payBtn.disabled = true; // tetap terkunci sampai user pilih
+    // ringkasan tetap Rp0/— sampai user memilih
   }
 
   async function fetchVouchers(cid){
@@ -369,39 +390,57 @@
 
     // Bersihkan onchange lama agar tidak reload
     if (selClient){
+      // pastikan tidak reload halaman
       if (selClient.hasAttribute('onchange')) selClient.removeAttribute('onchange');
       selClient.onchange = null;
 
-      const handleClientChange = function(e){
-        e.preventDefault(); e.stopPropagation(); if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-        const newCid = getResolvedClientId();
+      selClient.addEventListener('change', function(e){
+        e.preventDefault();
+        e.stopPropagation();
 
-        if (!newCid){ // placeholder
+        const newCid = selClient.value ? sanitizeClientId(selClient.value) : '';
+
+        if (!newCid){
+          // kembali ke kondisi awal: voucher kosong
           if (hidClient) hidClient.value = '';
-          const vSel = getVoucherSel();
-          if (vSel){ vSel.disabled = true; vSel.innerHTML=''; }
-          if (noVoucher) noVoucher.classList.remove('hidden');
+          const vSel = document.getElementById('voucherSelect');
+          if (vSel){ vSel.disabled = true; vSel.innerHTML = ''; }
           if (payBtn) payBtn.disabled = true;
+          if (noVoucher) { noVoucher.textContent = 'Pilih client untuk menampilkan voucher.'; noVoucher.classList.remove('hidden'); }
+          if (sumName)  sumName.textContent  = '—';
+          if (sumTotal) sumTotal.textContent = 'Rp0';
 
           const url = new URL(location.href);
           url.searchParams.delete('client');
           history.replaceState(null, '', url.toString());
-          updateSummary();
           return false;
         }
 
         if (hidClient) hidClient.value = newCid;
+        if (noVoucher) { noVoucher.textContent = 'Memuat voucher…'; noVoucher.classList.remove('hidden'); }
+
+        // muat voucher utk client terpilih
         fetchVouchers(newCid);
 
+        // update URL (tanpa reload)
         const url = new URL(location.href);
         url.searchParams.set('client', newCid);
         history.replaceState(null, '', url.toString());
         return false;
-      };
+      }, true);
+    }
 
-      selClient.addEventListener('change', handleClientChange, true);
-      selClient.addEventListener('input',  handleClientChange, true);
-      selClient.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); }});
+    // saat ganti voucher → enable tombol & update ringkasan
+    const vSelInit = document.getElementById('voucherSelect');
+    if (vSelInit){
+      vSelInit.addEventListener('change', function(){
+        const hasValue = !!this.value;
+        if (payBtn) payBtn.disabled = !hasValue;
+        updateSummary();
+      });
+      // sinkron state awal (kalau disabled/placeholder)
+      if (payBtn) payBtn.disabled = !(vSelInit.value);
+      updateSummary();
     }
 
     // Validasi realtime
