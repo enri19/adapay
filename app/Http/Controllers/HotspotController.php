@@ -17,54 +17,35 @@ class HotspotController extends Controller
 {
   public function index(Request $request)
   {
+    // … di dalam index()
     $host = strtolower($request->getHost());
     $isBaseHost = ($host === 'pay.adanih.info');
 
-    // resolve bawaan (subdomain / ?client / default)
     $clientId = \App\Support\ClientResolver::resolve($request);
 
     $clients = collect();
     if ($isBaseHost) {
-      $clients = DB::table('clients')
-        ->where('is_active', 1)
-        ->orderBy('name')
-        ->get(['client_id','name','slug']);
+      $clients = DB::table('clients')->where('is_active',1)
+                  ->orderBy('name')->get(['client_id','name','slug']);
 
-      $q = trim((string) $request->query('client', ''));
+      $q = trim((string) $request->query('client',''));
       if ($q !== '') {
-        $match = $clients->first(function($c) use ($q) {
-          return strcasecmp($c->client_id, $q) === 0 || strcasecmp((string) $c->slug, $q) === 0;
-        });
+        $match = $clients->first(fn($c)=> strcasecmp($c->client_id,$q)===0 || strcasecmp((string)$c->slug,$q)===0);
         if ($match) $clientId = $match->client_id;
       }
     }
 
-    // kalau base host & belum ada pilihan ⇒ biarkan null supaya select placeholder aktif
-    $selectedClientId = $clientId;
-    if ($isBaseHost && ($clientId === 'DEFAULT' || empty($clientId))) {
-      $selectedClientId = null;
-    }
+    // kalau base host & belum ada pilihan → biarkan null
+    $selectedClientId = ($isBaseHost && ($clientId === 'DEFAULT' || empty($clientId))) ? null : $clientId;
 
-    // load vouchers hanya kalau sudah ada client terpilih
-    $vouchers = $selectedClientId
-      ? \App\Models\HotspotVoucher::listForPortal($selectedClientId)
-      : collect();
+    // voucher hanya di-load jika sudah ada client terpilih
+    $vouchers = $selectedClientId ? \App\Models\HotspotVoucher::listForPortal($selectedClientId) : collect();
 
     return view('hotspot.index', [
       'vouchers'         => $vouchers,
-      'resolvedClientId' => $selectedClientId, // <— bisa null
+      'resolvedClientId' => $selectedClientId, // bisa null
       'isBaseHost'       => $isBaseHost,
       'clients'          => $clients,
-    ]);
-
-    // load vouchers sesuai client terpilih
-    $vouchers = \App\Models\HotspotVoucher::listForPortal($clientId);
-
-    return view('hotspot.index', [
-      'vouchers'         => $vouchers,
-      'resolvedClientId' => $clientId,   // hidden input di Blade
-      'isBaseHost'       => $isBaseHost, // kontrol tampil/tidaknya picker
-      'clients'          => $clients,    // kosong jika *.pay
     ]);
   }
 

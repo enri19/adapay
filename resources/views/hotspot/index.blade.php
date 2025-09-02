@@ -38,6 +38,8 @@
   .summary-row{display:flex;justify-content:space-between;gap:.75rem;font-size:.92rem}
   .summary-row + .summary-row{margin-top:.25rem}
   .summary-total{font-weight:700}
+
+  select:disabled{ background:#f9fafb; color:#6b7280; }
 </style>
 @endpush
 
@@ -56,17 +58,12 @@
       $isBaseHost = strtolower(request()->getHost()) === 'pay.adanih.info';
     @endphp
 
-    <form id="frm" class="space-y-3" onsubmit="return startCheckout(event)" novalidate
-      data-base-host="{{ $isBaseHost ? '1' : '0' }}">
-      <input type="hidden" id="client_id" name="client_id" value="{{ $resolvedClientId ?? 'DEFAULT' }}">
-
+    <form id="frm" class="space-y-3" onsubmit="return startCheckout(event)" novalidate data-base-host="{{ $isBaseHost ? '1' : '0' }}">
       {{-- Picker Client (tampil hanya di base host) --}}
       @if(!empty($isBaseHost) && $isBaseHost)
         <label class="block text-sm font-medium mb-1">Pilih Client</label>
         <select id="clientSelect" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" autocomplete="off">
-          {{-- Placeholder: terpilih saat belum ada client --}}
           <option value="" disabled @if(empty($resolvedClientId)) selected @endif>— Pilih Client —</option>
-
           @foreach($clients as $c)
             <option value="{{ $c->client_id }}"
                     data-slug="{{ $c->slug }}"
@@ -75,36 +72,31 @@
             </option>
           @endforeach
         </select>
-
-        {{-- Hidden untuk ikut terkirim saat checkout (kosong jika belum pilih) --}}
-        <input type="hidden" id="client_id" name="client_id" value="{{ $resolvedClientId ?? '' }}">
-
-        <p class="text-xs text-gray-500 mt-1">Pilih client terlebih dahulu untuk menampilkan daftar voucher.</p>
-      @else
-        {{-- Mode subdomain: tidak perlu picker, tapi tetap kirim client_id --}}
-        <input type="hidden" id="client_id" name="client_id" value="{{ $resolvedClientId ?? '' }}">
       @endif
+
+      {{-- Hidden client_id: satu saja, kosong jika belum pilih --}}
+      <input type="hidden" id="client_id" name="client_id" value="{{ $resolvedClientId ?? '' }}">
 
       {{-- Subcard: Voucher --}}
       <div class="subcard">
         <div class="subcard-hd">Pilih Voucher</div>
         <div class="subcard-bd">
-          @if($vouchers->isEmpty())
-            <div class="p-3 text-sm text-gray-600 border rounded bg-gray-50">
-              Belum ada voucher untuk lokasi ini.
-            </div>
-          @else
-            <label class="block text-sm font-medium mb-1">Voucher</label>
-            <select id="voucherSelect" name="voucher_id"
-                    class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
-                    @if(empty($resolvedClientId)) disabled @endif required>
-              @foreach($vouchers as $v)
-                <option value="{{ $v->id }}" data-name="{{ $v->name }}" data-price="{{ (int)$v->price }}">
-                  {{ $v->name }} — Rp{{ number_format($v->price,0,',','.') }}
-                </option>
-              @endforeach
-            </select>
-          @endif
+          <label class="block text-sm font-medium mb-1">Voucher</label>
+
+          <select id="voucherSelect" name="voucher_id"
+                  class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
+                  @if(empty($resolvedClientId)) disabled @endif required>
+            @foreach($vouchers as $v)
+              <option value="{{ $v->id }}" data-name="{{ $v->name }}" data-price="{{ (int)$v->price }}">
+                {{ $v->name }} — Rp{{ number_format($v->price,0,',','.') }}
+              </option>
+            @endforeach
+          </select>
+
+          <div id="noVoucherBox"
+              class="mt-2 p-3 text-sm text-gray-600 border rounded bg-gray-50 @if(!empty($resolvedClientId) && $vouchers->count()) hidden @endif">
+            Belum ada voucher untuk client ini.
+          </div>
         </div>
       </div>
 
@@ -218,55 +210,53 @@
 @push('scripts')
 <script>
 (function(){
-  // ========= Helpers umum =========
-  const $, $$ = (s,sc)=> (sc||document).querySelector(s), (s,sc)=>[].slice.call((sc||document).querySelectorAll(s));
+  // ===== Helpers =====
+  const $  = (s,sc)=> (sc||document).querySelector(s);
+  const $$ = (s,sc)=> Array.from((sc||document).querySelectorAll(s));
+  const isBaseHost = ()=> location.hostname.toLowerCase() === 'pay.adanih.info';
+  const sanitizeClientId = s => String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);
+  const rupiah = n => 'Rp' + Math.max(0,parseInt(n||0,10)).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+
   function setLoading(btn,on,txt){
     if(!btn) return;
-    const label = btn.querySelector('.btn__label');
-    const spin  = btn.querySelector('.spinner');
+    const label=btn.querySelector('.btn__label'), spin=btn.querySelector('.spinner');
     btn.toggleAttribute('disabled', !!on);
-    btn.setAttribute('aria-busy', on ? 'true' : 'false');
+    btn.setAttribute('aria-busy', on?'true':'false');
     if(spin) spin.classList.toggle('hidden', !on);
-    if(label){
-      if(btn.__orig==null) btn.__orig = label.textContent;
-      label.textContent = (on && txt) ? txt : btn.__orig;
-    }
+    if(label){ if(btn.__orig==null) btn.__orig=label.textContent; label.textContent=(on&&txt)?txt:btn.__orig; }
   }
-  function sanitizeClientId(s){ return (String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12)); }
-  function isBaseHost(){ return location.hostname.toLowerCase() === 'pay.adanih.info'; }
-  function rupiah(n){ const x=Math.max(0,parseInt(n||0,10)); return 'Rp' + x.toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
 
-  // ========= Elemen utama =========
-  const formEl     = $('#frm');
-  const selClient  = $('#clientSelect');     // hanya ada di base host
-  const selVoucher = $('#voucherSelect');    // SELALU ada (disabled jika kosong)
-  const hidClient  = $('#client_id');        // hidden input untuk payload
-  const payBtn     = $('#payBtn');
-  const errBox     = $('#payErr');
-  const noVoucher  = $('#noVoucherBox');     // box "Belum ada voucher..." (opsional)
+  // ===== Elements (beberapa pakai getter agar selalu up-to-date) =====
+  const formEl   = $('#frm');
+  const selClient= $('#clientSelect');
+  const hidClient= $('#client_id');
+  const payBtn   = $('#payBtn');
+  const errBox   = $('#payErr');
+  const noVoucher= $('#noVoucherBox');
+  const nameInput= $('#fldName');
+  const phoneInput=$('#fldPhone');
+  const emailInput=formEl ? formEl.querySelector('[name="email"]') : null;
 
-  const nameInput  = $('#fldName');
-  const phoneInput = $('#fldPhone');
-  const emailInput = formEl ? formEl.querySelector('[name="email"]') : null;
+  const sumName  = $('#sumVoucherName');
+  const sumTotal = $('#sumTotal');
+  const sumMethod= $('#sumMethod');
 
-  const sumName    = $('#sumVoucherName');
-  const sumTotal   = $('#sumTotal');
-  const sumMethod  = $('#sumMethod');
+  const API_VOUCHERS_URL = "{{ url('/api/hotspot/vouchers') }}";
+  const API_CHECKOUT_URL = "{{ url('/api/hotspot/checkout') }}";
 
-  const API_VOUCHERS_URL = "{{ url('/api/hotspot/vouchers') }}";   // GET ?client=...
-  const API_CHECKOUT_URL = "{{ url('/api/hotspot/checkout') }}";   // POST
+  // Getter supaya aman walau markup awal kosong
+  function getVoucherSel(){ return document.getElementById('voucherSelect'); }
 
-  // ========= Client resolver =========
+  // ===== Client resolver =====
   function getResolvedClientId(){
     if (!isBaseHost()){
       const parts = location.hostname.split('.');
-      if (parts.length > 3 && parts[0]) return sanitizeClientId(parts[0]); // c1.pay.adanih.info -> C1
-      return '';
+      return (parts.length > 3 && parts[0]) ? sanitizeClientId(parts[0]) : '';
     }
     return selClient && selClient.value ? sanitizeClientId(selClient.value) : '';
   }
 
-  // ========= Validasi input =========
+  // ===== Validasi sederhana =====
   function errElFor(input){ const id=(input?.id||'').replace(/^fld/,'err'); return document.getElementById(id); }
   function showFieldError(input,msg){
     const err=errElFor(input); if(!err||!input) return;
@@ -282,10 +272,7 @@
   function normalizeIdPhone(raw){
     const s=String(raw||'').trim(); if(!s) return {norm:'',ok:false};
     const plus62=s.startsWith('+62'); const digits=s.replace(/\D+/g,'');
-    let norm=digits;
-    if (plus62) norm='62'+digits.slice(2);
-    else if (digits.startsWith('62')) norm=digits;
-    else if (digits.startsWith('0')) norm='62'+digits.slice(1);
+    let norm=digits; if(plus62) norm='62'+digits.slice(2); else if(digits.startsWith('62')) norm=digits; else if(digits.startsWith('0')) norm='62'+digits.slice(1);
     const ok=/^62[0-9]{9,13}$/.test(norm) && /^62[8]/.test(norm);
     return {norm,ok};
   }
@@ -297,68 +284,65 @@
     return {msg:'',norm};
   }
 
-  // ========= Ringkasan UI =========
+  // ===== Ringkasan =====
   function currentMethod(){
     const r=document.querySelector('.pm-radio:checked');
     return (r && (r.value||'').toUpperCase()) || 'QRIS';
   }
   function updateSummary(){
-    const opt = selVoucher ? selVoucher.options[selVoucher.selectedIndex] : null;
+    const vSel = getVoucherSel();
+    const opt  = vSel ? vSel.options[vSel.selectedIndex] : null;
     const name = opt ? (opt.getAttribute('data-name') || opt.textContent || '—') : '—';
-    const price = opt ? parseInt(opt.getAttribute('data-price') || 0,10) : 0;
+    const price= opt ? parseInt(opt.getAttribute('data-price') || 0,10) : 0;
     if (sumName)   sumName.textContent  = name;
     if (sumTotal)  sumTotal.textContent = rupiah(price);
-    if (sumMethod) sumMethod.textContent = currentMethod();
+    if (sumMethod) sumMethod.textContent= currentMethod();
   }
 
-  // ========= Voucher AJAX =========
+  // ===== Voucher AJAX =====
   function rebuildVouchers(list){
-    if (!selVoucher) return;
-    selVoucher.innerHTML = '';
+    const vSel = getVoucherSel();
+    if (!vSel) return;
+    vSel.innerHTML = '';
     if (!Array.isArray(list) || list.length===0){
       if (noVoucher) noVoucher.classList.remove('hidden');
-      selVoucher.disabled = true;
+      vSel.disabled = true;
       if (payBtn) payBtn.disabled = true;
       updateSummary();
       return;
     }
     if (noVoucher) noVoucher.classList.add('hidden');
-    list.forEach(v=>{
+
+    // Tambah semua opsi
+    for (const v of list){
       const o=document.createElement('option');
       o.value=v.id;
       o.textContent=`${v.name} — ${rupiah(v.price)}`;
       o.setAttribute('data-name', v.name);
       o.setAttribute('data-price', v.price);
-      selVoucher.appendChild(o);
-    });
-    selVoucher.disabled = false;
+      vSel.appendChild(o);
+    }
+    vSel.disabled = false;
     if (payBtn) payBtn.disabled = false;
-    // trigger update
-    selVoucher.dispatchEvent(new Event('change'));
+
+    // Pilih opsi pertama & update total
+    vSel.selectedIndex = 0;
+    vSel.dispatchEvent(new Event('change'));
   }
 
   async function fetchVouchers(cid){
+    const vSel = getVoucherSel();
     try{
       if (hidClient) hidClient.value = cid;
-      if (selVoucher){
-        selVoucher.disabled = true;
-        selVoucher.innerHTML = '<option>Memuat…</option>';
-      }
+      if (vSel){ vSel.disabled = true; vSel.innerHTML = '<option>Memuat…</option>'; }
       if (payBtn) payBtn.disabled = true;
 
-      // GET utama
-      let res = await fetch(`${API_VOUCHERS_URL}?client=${encodeURIComponent(cid)}&client_id=${encodeURIComponent(cid)}`, {
-        headers: { 'Accept':'application/json' }
-      });
-      // fallback POST jika route GET tidak tersedia
-      if (!res.ok && (res.status===404 || res.status===405)) {
-        res = await fetch(API_VOUCHERS_URL, {
-          method:'POST',
-          headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
-          body: JSON.stringify({ client: cid, client_id: cid })
-        });
+      let res = await fetch(`${API_VOUCHERS_URL}?client=${encodeURIComponent(cid)}&client_id=${encodeURIComponent(cid)}`, { headers:{'Accept':'application/json'} });
+      if (!res.ok && (res.status===404 || res.status===405)){
+        res = await fetch(API_VOUCHERS_URL, { method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: JSON.stringify({ client: cid, client_id: cid }) });
       }
       if (!res.ok) throw new Error('HTTP '+res.status);
+
       const json = await res.json();
       const list = Array.isArray(json) ? json : (json.data || json.vouchers || json.items || []);
       rebuildVouchers(list || []);
@@ -368,21 +352,22 @@
     }
   }
 
-  // ========= Init halaman =========
+  // ===== Init =====
   document.addEventListener('DOMContentLoaded', function(){
-    // Base host tanpa pilihan → kunci UI, jangan pilih otomatis
+    // Base host tanpa pilihan → kunci UI
     if (isBaseHost() && (!selClient || !selClient.value)){
       if (hidClient) hidClient.value = '';
-      if (selVoucher){ selVoucher.disabled = true; selVoucher.innerHTML=''; }
+      const vSel = getVoucherSel();
+      if (vSel){ vSel.disabled = true; vSel.innerHTML=''; }
       if (noVoucher) noVoucher.classList.remove('hidden');
       if (payBtn) payBtn.disabled = true;
     } else {
-      // Subdomain atau sudah ada pilihan dari server
+      // Subdomain atau server sudah pilih client
       const cid = getResolvedClientId();
       if (hidClient) hidClient.value = cid;
     }
 
-    // Hapus handler inline lama (yang bikin reload)
+    // Bersihkan onchange lama agar tidak reload
     if (selClient){
       if (selClient.hasAttribute('onchange')) selClient.removeAttribute('onchange');
       selClient.onchange = null;
@@ -391,15 +376,17 @@
         e.preventDefault(); e.stopPropagation(); if (e.stopImmediatePropagation) e.stopImmediatePropagation();
         const newCid = getResolvedClientId();
 
-        if (!newCid){ // placeholder dipilih
+        if (!newCid){ // placeholder
           if (hidClient) hidClient.value = '';
-          if (selVoucher){ selVoucher.disabled = true; selVoucher.innerHTML=''; }
+          const vSel = getVoucherSel();
+          if (vSel){ vSel.disabled = true; vSel.innerHTML=''; }
           if (noVoucher) noVoucher.classList.remove('hidden');
           if (payBtn) payBtn.disabled = true;
 
           const url = new URL(location.href);
           url.searchParams.delete('client');
           history.replaceState(null, '', url.toString());
+          updateSummary();
           return false;
         }
 
@@ -412,7 +399,6 @@
         return false;
       };
 
-      // pasang listener di capture phase agar mematikan listener lama
       selClient.addEventListener('change', handleClientChange, true);
       selClient.addEventListener('input',  handleClientChange, true);
       selClient.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); }});
@@ -428,12 +414,12 @@
       phoneInput.addEventListener('blur',  ()=>showFieldError(phoneInput, validatePhone(phoneInput).msg));
     }
 
-    // Ringkasan & metode
-    if (selVoucher) selVoucher.addEventListener('change', updateSummary);
-    // init ringkasan dari state awal server
+    // Ringkasan awal & listener voucher
+    const vSel = getVoucherSel();
+    if (vSel) vSel.addEventListener('change', updateSummary);
     updateSummary();
 
-    // metode pembayaran (klik kartu)
+    // Toggle metode pembayaran (untuk update metode di ringkasan)
     function setChecked(card){
       $$('.pm-card').forEach(c=>{
         c.setAttribute('aria-checked','false');
@@ -443,7 +429,7 @@
       const radio=card.querySelector('.pm-radio'); if(radio) radio.checked=true;
       updateSummary();
     }
-    const current=$('.pm-radio:checked');
+    const current=document.querySelector('.pm-radio:checked');
     if (current){ const card=current.closest('.pm-card'); if(card) setChecked(card); }
     $$('.pay-methods').forEach(group=>{
       group.addEventListener('click', e=>{
@@ -458,36 +444,31 @@
     });
   });
 
-  // ========= Submit checkout =========
+  // ===== Submit checkout =====
   window.startCheckout = async function(e){
     e.preventDefault();
     if (errBox){ errBox.classList.add('hidden'); errBox.textContent=''; }
 
-    // Base host wajib pilih client dulu
     const cid = getResolvedClientId();
     if (isBaseHost() && !cid){
       if (errBox){ errBox.textContent = 'Silakan pilih client terlebih dahulu.'; errBox.classList.remove('hidden'); }
       return false;
     }
 
-    // Validasi field
     const nmErr = validateName(nameInput); if (nmErr){ showFieldError(nameInput, nmErr); return false; } else { showFieldError(nameInput, null); }
     const { msg: phErr, norm: phoneNorm } = validatePhone(phoneInput); if (phErr){ showFieldError(phoneInput, phErr); return false; } else { showFieldError(phoneInput, null); }
 
-    // Validasi voucher dipilih
-    if (!selVoucher || selVoucher.disabled || !selVoucher.value){
+    const vSel = getVoucherSel();
+    if (!vSel || vSel.disabled || !vSel.value){
       if (errBox){ errBox.textContent = 'Silakan pilih voucher terlebih dahulu.'; errBox.classList.remove('hidden'); }
       return false;
     }
 
     if (hidClient) hidClient.value = cid;
 
-    const voucherId = Number(selVoucher.value);
-    const method = (document.querySelector('.pm-radio:checked')?.value || 'qris').toLowerCase();
-
     const payload = {
-      voucher_id: voucherId,
-      method: method,
+      voucher_id: Number(vSel.value),
+      method: (document.querySelector('.pm-radio:checked')?.value || 'qris').toLowerCase(),
       name: String(nameInput.value||'').trim(),
       email: emailInput ? (emailInput.value||null) : null,
       phone: phoneNorm || String(phoneInput.value||'').trim(),
@@ -496,8 +477,7 @@
 
     setLoading(payBtn, true, 'Memproses…');
 
-    // Timeout 20s agar spinner tak nyangkut
-    const ctrl  = new AbortController();
+    const ctrl = new AbortController();
     const timer = setTimeout(()=>ctrl.abort(), 20000);
 
     try{
@@ -507,7 +487,6 @@
         body: JSON.stringify(payload),
         signal: ctrl.signal
       });
-
       const text = await res.text();
       let data; try{ data = JSON.parse(text); }catch{ throw new Error('RESP_INVALID: ' + text.slice(0,120)); }
 
@@ -534,7 +513,7 @@
       location.href = '/hotspot/order/' + encodeURIComponent(orderId);
       return false;
 
-    } catch(e){
+    }catch(e){
       setLoading(payBtn, false);
       if (errBox){
         errBox.textContent = (e.name === 'AbortError')
@@ -543,7 +522,7 @@
         errBox.classList.remove('hidden');
       }
       return false;
-    } finally {
+    }finally{
       clearTimeout(timer);
     }
   };
