@@ -33,6 +33,10 @@
     </div>
 
     <div class="panel-bd">
+      <div id="demoErr" class="hidden mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+        Gagal memuat status. Muat ulang halaman.
+      </div>
+
       <div class="grid md:grid-cols-3 gap-4">
         <!-- Kiri: detail & aksi -->
         <div class="md:col-span-2 space-y-4">
@@ -133,87 +137,103 @@
 
 @push('scripts')
 <script>
-(function(){
-  var status = 'PENDING';
-  var sec = {{ (int) $order->expires_in_sec }};
-  var badgeText = document.getElementById('badgeText');
-  var badgeDot  = document.getElementById('badgeDot');
-  var expTimer  = document.getElementById('expTimer');
-  var payBox    = document.getElementById('payBox');
-  var credBox   = document.getElementById('credBox');
-  var sumMethod = document.getElementById('sumMethod');
-  var methodText= document.getElementById('methodText');
+document.addEventListener('DOMContentLoaded', function(){
+  try {
+    var status = 'PENDING';
+    var sec = Number({{ (int) $order->expires_in_sec }}) || 0;
 
-  // countdown
-  function fmt(n){ return n<10 ? '0'+n : ''+n; }
-  function tick(){
-    if (status !== 'PENDING') return;
-    sec = Math.max(0, sec-1);
-    var m = Math.floor(sec/60), s = sec%60;
-    expTimer.textContent = m+':'+fmt(s);
-    if (sec === 0) setExpired();
-  }
-  setInterval(tick, 1000);
-  tick();
+    var els = {
+      badgeText : document.getElementById('badgeText'),
+      badgeDot  : document.getElementById('badgeDot'),
+      expTimer  : document.getElementById('expTimer'),
+      payBox    : document.getElementById('payBox'),
+      credBox   : document.getElementById('credBox'),
+      sumMethod : document.getElementById('sumMethod'),
+      methodText: document.getElementById('methodText'),
+      btnPaid   : document.getElementById('btnMarkPaid'),
+      btnErr    : document.getElementById('btnSimError'),
+      btnCopy   : document.getElementById('btnCopy'),
+      codeVal   : document.getElementById('codeVal'),
+      copyOk    : document.getElementById('copyOk'),
+      errBox    : document.getElementById('demoErr')
+    };
 
-  function setBadge(newStatus){
-    status = newStatus;
-    badgeText.textContent = newStatus;
-    badgeDot.className = 'dot ' + (newStatus==='PAID' ? 'dot-paid' : newStatus==='EXPIRED' ? 'dot-expired' : 'dot-pending');
-  }
-  function setPaid(){
-    setBadge('PAID');
-    payBox.classList.add('hidden');
-    credBox.classList.remove('hidden');
-  }
-  function setExpired(){
-    setBadge('EXPIRED');
-    payBox.classList.add('hidden');
-  }
-
-  // metode radio (demo)
-  document.querySelectorAll('.pm-card').forEach(function(card){
-    card.addEventListener('click', function(){
-      document.querySelectorAll('.pm-card').forEach(function(c){
-        c.setAttribute('aria-checked','false');
-        var r = c.querySelector('.pm-radio'); if (r) r.checked = false;
-      });
-      card.setAttribute('aria-checked','true');
-      var r = card.querySelector('.pm-radio'); if (r) r.checked = true;
-      var val = r ? r.value : 'QRIS';
-      sumMethod.textContent = val;
-      methodText.textContent = val + ' (Demo)';
+    // Elemen wajib; kalau hilang, tampilkan error box & stop
+    ['badgeText','badgeDot','expTimer','payBox','sumMethod','methodText'].forEach(function(k){
+      if(!els[k]) throw new Error('Missing #' + k);
     });
-  });
 
-  // buttons
-  document.getElementById('btnMarkPaid').addEventListener('click', function(){
-    if (status === 'EXPIRED') return;
-    setPaid();
-  });
+    function fmt(n){ return (n<10?'0':'') + n; }
+    function setBadge(s){
+      status = s;
+      els.badgeText.textContent = s;
+      els.badgeDot.className = 'dot ' + (s==='PAID' ? 'dot-paid' : s==='EXPIRED' ? 'dot-expired' : 'dot-pending');
+    }
+    function setPaid(){
+      setBadge('PAID');
+      els.payBox.classList.add('hidden');
+      if (els.credBox) els.credBox.classList.remove('hidden');
+    }
+    function setExpired(){
+      setBadge('EXPIRED');
+      els.payBox.classList.add('hidden');
+    }
 
-  document.getElementById('btnSimError').addEventListener('click', function(){
-    if (status !== 'PENDING') return;
-    // efek error singkat
-    payBox.style.opacity = '.6';
-    var old = methodText.textContent;
-    methodText.textContent = old + ' — gangguan kanal';
-    setTimeout(function(){
-      payBox.style.opacity = '1';
-      methodText.textContent = old + ' — retry OK';
-    }, 1200);
-  });
+    // Countdown
+    function tick(){
+      if (status !== 'PENDING') return;
+      sec = Math.max(0, sec - 1);
+      els.expTimer.textContent = Math.floor(sec/60) + ':' + fmt(sec%60);
+      if (sec === 0) setExpired();
+    }
+    tick();
+    setInterval(tick, 1000);
 
-  // copy kode
-  document.getElementById('btnCopy').addEventListener('click', function(){
-    var txt = document.getElementById('codeVal').textContent || '';
-    try {
-      navigator.clipboard.writeText(txt).then(function(){
-        document.getElementById('copyOk').classList.remove('hidden');
-        setTimeout(function(){ document.getElementById('copyOk').classList.add('hidden'); }, 1200);
+    // Pilih metode (demo-only)
+    document.querySelectorAll('.pm-card').forEach(function(card){
+      card.addEventListener('click', function(){
+        document.querySelectorAll('.pm-card').forEach(function(c){
+          c.setAttribute('aria-checked','false');
+          var r = c.querySelector('.pm-radio'); if (r) r.checked = false;
+        });
+        card.setAttribute('aria-checked','true');
+        var r = card.querySelector('.pm-radio'); if (r) r.checked = true;
+        var v = r ? r.value : 'QRIS';
+        els.sumMethod.textContent = v;
+        els.methodText.textContent = v + ' (Demo)';
       });
-    } catch(e){}
-  });
-})();
+    });
+
+    // Tombol
+    if (els.btnPaid) els.btnPaid.addEventListener('click', function(){
+      if (status !== 'EXPIRED') setPaid();
+    });
+    if (els.btnErr) els.btnErr.addEventListener('click', function(){
+      if (status !== 'PENDING') return;
+      var old = els.methodText.textContent;
+      els.payBox.style.opacity = '.6';
+      els.methodText.textContent = old + ' — gangguan kanal';
+      setTimeout(function(){
+        els.payBox.style.opacity = '1';
+        els.methodText.textContent = old + ' — retry OK';
+      }, 1200);
+    });
+    if (els.btnCopy) els.btnCopy.addEventListener('click', function(){
+      var txt = (els.codeVal && els.codeVal.textContent) || '';
+      if (!navigator.clipboard) return;
+      navigator.clipboard.writeText(txt).then(function(){
+        if (els.copyOk){
+          els.copyOk.classList.remove('hidden');
+          setTimeout(function(){ els.copyOk.classList.add('hidden'); }, 1200);
+        }
+      });
+    });
+
+  } catch (e) {
+    var box = document.getElementById('demoErr');
+    if (box) box.classList.remove('hidden');
+    if (window.console && console.error) console.error('Order demo init failed:', e);
+  }
+});
 </script>
 @endpush
