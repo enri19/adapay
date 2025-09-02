@@ -232,15 +232,6 @@
     }
   }
 
-  // function getClientIdFromHost(){
-  //   const parts = location.hostname.split('.');
-  //   if (parts.length > 2) {
-  //     return (parts[0] || 'DEFAULT').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12) || 'DEFAULT';
-  //   }
-  //   const q = new URLSearchParams(location.search).get('client') || 'DEFAULT';
-  //   return q.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);
-  // }
-
   // --- NEW: helpers untuk client id ---
   function sanitizeClientId(s){
     return (String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12) || 'DEFAULT');
@@ -355,7 +346,7 @@
   // set hidden client_id saat load + live validation
   document.addEventListener('DOMContentLoaded', function(){
     const hid = document.getElementById('client_id');
-    const cid = getClientIdFromHost();
+    const cid = getResolvedClientId();
     if (hid) hid.value = cid;
 
     const nameInput  = document.getElementById('fldName');
@@ -393,7 +384,7 @@
 
     // kumpulkan data
     const form = new FormData(formEl);
-    const cid = getClientIdFromHost();
+    const cid = getResolvedClientId();
     form.set('client_id', cid);
     const hid = document.getElementById('client_id'); if (hid) hid.value = cid;
 
@@ -474,5 +465,88 @@
     });
   });
 })();
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const selClient   = document.getElementById('clientSelect');   // hanya ada di base host
+  const selVoucher  = document.getElementById('voucherSelect');
+  const hiddenCid   = document.getElementById('client_id');
+  const payBtn      = document.getElementById('payBtn');
+  const noVoucher   = document.getElementById('noVoucherBox');   // optional (placeholder)
+  const sumName     = document.getElementById('sumVoucherName'); // optional (ringkasan)
+  const sumTotal    = document.getElementById('sumTotal');       // optional (ringkasan)
+
+  const VOUCHERS_URL = "{{ route('api.hotspot.vouchers') }}";    // fallback: '/api/hotspot/vouchers'
+
+  function rupiah(n){
+    const x = Math.max(0, parseInt(n||0,10));
+    return 'Rp' + x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  }
+
+  function updateSummaryFromSelect(){
+    if (!selVoucher) return;
+    const opt   = selVoucher.options[selVoucher.selectedIndex];
+    const name  = opt ? (opt.getAttribute('data-name') || opt.textContent || '—') : '—';
+    const price = opt ? parseInt(opt.getAttribute('data-price') || 0, 10) : 0;
+    if (sumName)  sumName.textContent  = name;
+    if (sumTotal) sumTotal.textContent = rupiah(price);
+  }
+
+  function rebuildVouchers(list){
+    if (!selVoucher) return;
+    selVoucher.innerHTML = '';
+    if (!list || !list.length){
+      if (noVoucher) noVoucher.classList.remove('hidden');
+      selVoucher.disabled = true;
+      if (payBtn) payBtn.disabled = true;
+      updateSummaryFromSelect();
+      return;
+    }
+    if (noVoucher) noVoucher.classList.add('hidden');
+    list.forEach(v => {
+      const o = document.createElement('option');
+      o.value = v.id;
+      o.textContent = `${v.name} — ${rupiah(v.price)}`;
+      o.setAttribute('data-name', v.name);
+      o.setAttribute('data-price', v.price);
+      selVoucher.appendChild(o);
+    });
+    selVoucher.disabled = false;
+    if (payBtn) payBtn.disabled = false;
+    updateSummaryFromSelect();
+  }
+
+  async function fetchVouchers(cid){
+    try{
+      if (hiddenCid) hiddenCid.value = cid;
+      if (selVoucher){
+        selVoucher.disabled = true;
+        selVoucher.innerHTML = '<option>Memuat…</option>';
+      }
+      if (payBtn) payBtn.disabled = true;
+
+      const url = `${VOUCHERS_URL}?client=${encodeURIComponent(cid)}`;
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      rebuildVouchers(json && json.data ? json.data : []);
+    } catch (e){
+      console.error('Gagal memuat voucher:', e);
+      rebuildVouchers([]);
+    }
+  }
+
+  // saat user ganti client (base host)
+  if (selClient){
+    selClient.addEventListener('change', () => {
+      const cid = String(selClient.value || 'DEFAULT').toUpperCase();
+      fetchVouchers(cid);
+    });
+  }
+
+  // init ringkasan saat load (untuk kondisi awal dari server)
+  updateSummaryFromSelect();
+});
 </script>
 @endpush

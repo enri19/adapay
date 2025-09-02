@@ -19,3 +19,4 @@ Route::post('/webhooks/midtrans', [WebhookController::class, 'handle']);
 
 Route::post('/hotspot/checkout', [HotspotController::class, 'checkout']);
 Route::get('/hotspot/credentials/{orderId}', [HotspotController::class, 'credentials']);
+Route::get('/hotspot/vouchers', [HotspotController::class, 'vouchers'])->name('api.hotspot.vouchers');

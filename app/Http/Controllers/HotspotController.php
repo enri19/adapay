@@ -60,6 +60,40 @@ class HotspotController extends Controller
     ]);
   }
 
+  public function apiVouchers(Request $request)
+  {
+    $q = trim((string) $request->query('client', ''));
+    $clientId = 'DEFAULT';
+
+    if ($q !== '') {
+      $row = DB::table('clients')
+        ->where('is_active', 1)
+        ->where(function($w) use ($q) {
+          $w->where('client_id', $q)->orWhere('slug', $q);
+        })
+        ->select('client_id')
+        ->first();
+      $clientId = $row ? $row->client_id : strtoupper(preg_replace('/[^A-Z0-9]/', '', $q));
+    }
+
+    $vouchers = \App\Models\HotspotVoucher::listForPortal($clientId);
+
+    $data = $vouchers->map(function($v){
+      return [
+        'id'    => (int) $v->id,
+        'name'  => $v->name,
+        'price' => (int) $v->price,
+      ];
+    })->values();
+
+    return response()->json([
+      'ok'        => true,
+      'client_id' => $clientId,
+      'count'     => $data->count(),
+      'data'      => $data,
+    ]);
+  }
+
   public function orderView(string $orderId)
   {
     return view('hotspot.order', compact('orderId'));
@@ -167,6 +201,40 @@ class HotspotController extends Controller
       'password' => $user->password,
       'profile' => $user->profile,
       'duration_minutes' => $user->duration_minutes,
+    ]);
+  }
+
+  public function vouchers(Request $request)
+  {
+    $q = trim((string) $request->query('client', ''));
+    $clientId = 'DEFAULT';
+
+    if ($q !== '') {
+      $row = DB::table('clients')
+        ->where('is_active', 1)
+        ->where(function($w) use ($q) {
+          $w->where('client_id', $q)->orWhere('slug', $q);
+        })
+        ->select('client_id')
+        ->first();
+      $clientId = $row ? $row->client_id : strtoupper(preg_replace('/[^A-Z0-9]/', '', $q));
+    }
+
+    $vouchers = \App\Models\HotspotVoucher::listForPortal($clientId);
+
+    $data = $vouchers->map(function($v){
+      return [
+        'id'    => (int) $v->id,
+        'name'  => $v->name,
+        'price' => (int) $v->price,
+      ];
+    })->values();
+
+    return response()->json([
+      'ok'        => true,
+      'client_id' => $clientId,
+      'count'     => $data->count(),
+      'data'      => $data,
     ]);
   }
 
