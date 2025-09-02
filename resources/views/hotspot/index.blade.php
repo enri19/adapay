@@ -376,9 +376,9 @@
         const newCid = sanitizeClientId(selClient.value || 'DEFAULT');
         fetchVouchers(newCid);
 
-        const url = new URL(location.href);
-        url.searchParams.set('client', cid);
-        history.replaceState(null, '', url.toString());
+        // const url = new URL(location.href);
+        // url.searchParams.set('client', cid);
+        // history.replaceState(null, '', url.toString());
         
         return false;
       };
