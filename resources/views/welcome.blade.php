@@ -123,7 +123,6 @@
   </section>
 
   <!-- Info cepat / keamanan / SLA -->
-  <!-- Info cepat / keamanan / SLA -->
   <section class="mt-8 grid gap-4 md:grid-cols-3">
     <div class="rounded-xl border bg-white p-4">
       <div class="font-semibold mb-1">Monitoring & Status</div>
@@ -227,7 +226,7 @@
           <a href="{{ url('/contact') }}" class="btn btn--primary">
             <span class="btn__label">Jadwalkan Demo</span>
           </a>
-          <a href="https://wa.me/6281234567890?text=Halo%20AdaPay%2C%20saya%20ingin%20mendaftar%20sebagai%20mitra."
+          <a href="https://wa.me/62859106992437?text=Halo%20AdaPay%2C%20saya%20ingin%20mendaftar%20sebagai%20mitra."
             target="_blank" rel="noopener"
             class="inline-flex items-center rounded-lg border bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
             Chat Sales
