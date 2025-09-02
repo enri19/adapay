@@ -15,14 +15,48 @@ use Illuminate\Support\Str;
 
 class HotspotController extends Controller
 {
-  public function index(\Illuminate\Http\Request $request)
+  public function index(Request $request)
   {
+    $host = strtolower($request->getHost());
+    $isBaseHost = ($host === 'pay.adanih.info');
+
+    // resolve bawaan (subdomain / ?client / default)
     $clientId = \App\Support\ClientResolver::resolve($request);
+
+    // daftar client aktif hanya untuk base host
+    $clients = collect();
+    if ($isBaseHost) {
+      // ambil client aktif (pakai DB langsung supaya tidak tergantung model)
+      $clients = DB::table('clients')
+        ->where('is_active', 1)
+        ->orderBy('name')
+        ->get(['client_id','name','slug']);
+
+      // kalau ada ?client (boleh client_id atau slug), pakai itu
+      $q = trim((string) $request->query('client', ''));
+      if ($q !== '') {
+        $match = $clients->first(function($c) use ($q) {
+          return strcasecmp($c->client_id, $q) === 0 || strcasecmp((string) $c->slug, $q) === 0;
+        });
+        if ($match) {
+          $clientId = $match->client_id;
+        }
+      }
+
+      // fallback: kalau resolver masih 'DEFAULT' atau kosong, pilih client aktif pertama
+      if (($clientId === 'DEFAULT' || empty($clientId)) && $clients->count() > 0) {
+        $clientId = $clients->first()->client_id;
+      }
+    }
+
+    // load vouchers sesuai client terpilih
     $vouchers = \App\Models\HotspotVoucher::listForPortal($clientId);
 
     return view('hotspot.index', [
-      'vouchers' => $vouchers,
-      'resolvedClientId' => $clientId, // supaya hidden input di Blade terisi
+      'vouchers'         => $vouchers,
+      'resolvedClientId' => $clientId,   // hidden input di Blade
+      'isBaseHost'       => $isBaseHost, // kontrol tampil/tidaknya picker
+      'clients'          => $clients,    // kosong jika *.pay
     ]);
   }
 

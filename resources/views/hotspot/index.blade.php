@@ -60,23 +60,28 @@
       data-base-host="{{ $isBaseHost ? '1' : '0' }}">
       <input type="hidden" id="client_id" name="client_id" value="{{ $resolvedClientId ?? 'DEFAULT' }}">
 
-      @if ($isBaseHost)
+      {{-- Pilih Client (muncul hanya di base host) --}}
+      @if (!empty($isBaseHost) && $isBaseHost)
         <div class="subcard">
           <div class="subcard-hd">Pilih Client</div>
           <div class="subcard-bd">
-            {{-- Jika kamu kirim $clients dari controller, pakai <select>. Kalau tidak, pakai <input>. --}}
-            @if(isset($clients) && count($clients))
-              <label class="block text-sm font-medium mb-1">Client</label>
-              <select id="clientSelect" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" required>
-                @foreach($clients as $c)
-                  <option value="{{ $c->code }}">{{ $c->name ?? $c->code }}</option>
-                @endforeach
-              </select>
+            @if($clients->isEmpty())
+              <div class="p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded">
+                Belum ada client aktif. Hubungi admin.
+              </div>
             @else
               <label class="block text-sm font-medium mb-1">Client</label>
-              <input id="clientInput" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
-                    placeholder="Mis. DEFAULT atau C1" value="{{ old('client_id','DEFAULT') }}" required>
-              <p class="text-xs text-gray-500 mt-1">Atau tambahkan <code>?client=DEFAULT</code> di URL.</p>
+              <select id="clientSelect"
+                      class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
+                      onchange="location.href='{{ url('/hotspot') }}?client=' + encodeURIComponent(this.value)">
+                @foreach($clients as $c)
+                  <option value="{{ $c->client_id }}"
+                    @if(isset($resolvedClientId) && $resolvedClientId === $c->client_id) selected @endif>
+                    {{ $c->name }} ({{ $c->client_id }})
+                  </option>
+                @endforeach
+              </select>
+              <p class="text-xs text-gray-500 mt-1">Ganti client akan memuat ulang paket/voucher untuk client tersebut.</p>
             @endif
           </div>
         </div>
