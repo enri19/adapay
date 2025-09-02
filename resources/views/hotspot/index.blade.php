@@ -259,11 +259,14 @@
 
   // ===== Client resolver =====
   function getResolvedClientId(){
+    // Subdomain → pakai subdomain pertama (c1.pay.adanih.info)
     if (!isBaseHost()){
       const parts = location.hostname.split('.');
       return (parts.length > 3 && parts[0]) ? sanitizeClientId(parts[0]) : '';
     }
-    return selClient && selClient.value ? sanitizeClientId(selClient.value) : '';
+    // BASE HOST → JANGAN baca dari <select>, cuma dari ?client=
+    const q = new URLSearchParams(location.search).get('client') || '';
+    return sanitizeClientId(q);
   }
 
   // ===== Validasi sederhana =====
@@ -376,14 +379,33 @@
   // ===== Init =====
   document.addEventListener('DOMContentLoaded', function(){
     // Base host tanpa pilihan → kunci UI
-    if (isBaseHost() && (!selClient || !selClient.value)){
-      if (hidClient) hidClient.value = '';
-      const vSel = getVoucherSel();
-      if (vSel){ vSel.disabled = true; vSel.innerHTML=''; }
-      if (noVoucher) noVoucher.classList.remove('hidden');
-      if (payBtn) payBtn.disabled = true;
+    if (isBaseHost()){
+      const q = new URLSearchParams(location.search).get('client') || '';
+      if (!q) {
+        // Pastikan UI benar2 kosong → voucher kosong & select client tetap placeholder
+        if (selClient) {
+          // paksa ke placeholder
+          if (selClient.querySelector('option[value=""]')) {
+            selClient.value = '';
+          } else {
+            selClient.selectedIndex = -1; // tidak memilih apapun
+          }
+        }
+        const vSel = document.getElementById('voucherSelect');
+        if (vSel) { vSel.disabled = true; vSel.innerHTML = ''; }
+        if (noVoucher) { noVoucher.textContent = 'Pilih client untuk menampilkan voucher.'; noVoucher.classList.remove('hidden'); }
+        if (payBtn) payBtn.disabled = true;
+        if (hidClient) hidClient.value = '';
+        if (sumName)  sumName.textContent  = '—';
+        if (sumTotal) sumTotal.textContent = 'Rp0';
+      } else {
+        // Ada ?client= → sinkronkan select (kalau opsinya ada)
+        if (selClient) selClient.value = q;
+        if (hidClient) hidClient.value = q;
+        // kamu boleh panggil fetchVouchers(q) di sini kalau mau preload
+      }
     } else {
-      // Subdomain atau server sudah pilih client
+      // mode subdomain
       const cid = getResolvedClientId();
       if (hidClient) hidClient.value = cid;
     }
@@ -401,31 +423,28 @@
         const newCid = selClient.value ? sanitizeClientId(selClient.value) : '';
 
         if (!newCid){
-          // kembali ke kondisi awal: voucher kosong
           if (hidClient) hidClient.value = '';
           const vSel = document.getElementById('voucherSelect');
-          if (vSel){ vSel.disabled = true; vSel.innerHTML = ''; }
-          if (payBtn) payBtn.disabled = true;
+          if (vSel) { vSel.disabled = true; vSel.innerHTML = ''; }
           if (noVoucher) { noVoucher.textContent = 'Pilih client untuk menampilkan voucher.'; noVoucher.classList.remove('hidden'); }
+          if (payBtn) payBtn.disabled = true;
+
+          const url0 = new URL(location.href);
+          url0.searchParams.delete('client');
+          history.replaceState(null, '', url0.toString());
           if (sumName)  sumName.textContent  = '—';
           if (sumTotal) sumTotal.textContent = 'Rp0';
-
-          const url = new URL(location.href);
-          url.searchParams.delete('client');
-          history.replaceState(null, '', url.toString());
           return false;
         }
 
-        if (hidClient) hidClient.value = newCid;
-        if (noVoucher) { noVoucher.textContent = 'Memuat voucher…'; noVoucher.classList.remove('hidden'); }
-
-        // muat voucher utk client terpilih
-        fetchVouchers(newCid);
-
-        // update URL (tanpa reload)
         const url = new URL(location.href);
         url.searchParams.set('client', newCid);
         history.replaceState(null, '', url.toString());
+
+        // 2) sinkron & load voucher
+        if (hidClient) hidClient.value = newCid;
+        if (noVoucher) { noVoucher.textContent = 'Memuat voucher…'; noVoucher.classList.remove('hidden'); }
+        fetchVouchers(newCid);
         return false;
       }, true);
     }
