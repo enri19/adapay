@@ -3,12 +3,28 @@
 
 @push('head')
 <style>
-  .kpis{display:grid;gap:12px;}
-  .kpi{background:var(--card);border:1px solid var(--bd);border-radius:.75rem;padding:14px}
-  .kpi .label{font-size:.82rem;color:var(--mut)}
-  .kpi .value{font-weight:800;font-size:1.4rem;margin-top:4px}
-  .kpi .sub{font-size:.8rem;color:var(--mut)}
+  /* ==== KPI GRID: mobile-first ==== */
+  .kpis{display:grid;gap:12px;grid-template-columns:1fr}
+  /* small phones → 2 kolom */
+  @media (min-width:480px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  /* desktop → 3 atau 4 kolom sesuai role */
+  @media (min-width:1024px){
+    .kpis.kpis--3{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .kpis.kpis--4{grid-template-columns:repeat(4,minmax(0,1fr))}
+  }
 
+  .kpi{background:var(--card);border:1px solid var(--bd);border-radius:.75rem;padding:14px;display:flex;flex-direction:column;gap:4px}
+  .kpi .label{font-size:.82rem;color:var(--mut)}
+  /* value responsif + truncate agar nama panjang rapi */
+  .kpi .value{
+    font-weight:800;
+    font-size:clamp(1.1rem,2.8vw,1.4rem);
+    margin-top:2px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+  }
+  .kpi .sub{font-size:.8rem;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* tombol tab tetap */
   .tabs{display:flex;gap:8px;margin-top:12px}
   .tab-btn{appearance:none;border:1px solid var(--bd);background:var(--card);padding:8px 12px;border-radius:.5rem;cursor:pointer;font-weight:600}
   .tab-btn[aria-selected="true"]{outline:2px solid #6366f1;border-color:#6366f1}
@@ -19,12 +35,11 @@
   .grid-2{display:grid;gap:12px}
   @media(min-width:768px){ .grid-2{grid-template-columns:1fr 1fr} }
 
-  /* mini-bars kembali ke grid (sesuai versi stabil kamu) */
+  /* mini-bars tetap */
   .mini-bars{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px;align-items:end;height:72px}
   .mini-bars .bar{background:#e5edff;border-radius:6px}
   .mini-bars .bar.is-sum{background:#d1fae5}
 
-  /* dorong mini-bars ke bawah card */
   .card--chart{display:flex;flex-direction:column}
   .card--chart .mini-bars{margin-top:auto}
 
