@@ -1,64 +1,109 @@
 @extends('layouts.app')
 @section('title', 'Order Hotspot')
 
+@push('head')
+<style>
+  /* ====== Box/Panel (selaras dengan index) ====== */
+  .panel{border:1px solid #e5e7eb;border-radius:1rem;background:#fff;padding:1rem}
+  .panel--accent{background:linear-gradient(180deg,#f8fbff, #fff)}
+  .panel-hd{display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem}
+  .panel-ic{width:20px;height:20px;color:#0284c7}
+  .subcard{border:1px solid #eef2f7;border-radius:.75rem;background:#fff}
+  .subcard-hd{padding:.75rem .9rem;border-bottom:1px solid #eef2f7;font-weight:600}
+  .subcard-bd{padding:.9rem}
+
+  /* ====== Payment helpers (konsisten) ====== */
+  .summary{border:1px solid #dbeafe;background:#f0f7ff;border-radius:.75rem;padding:.75rem}
+  .summary-row{display:flex;justify-content:space-between;gap:.75rem;font-size:.92rem}
+  .summary-row + .summary-row{margin-top:.25rem}
+  .summary-total{font-weight:700}
+  .muted{color:#6b7280}
+  .icon-check{width:1rem;height:1rem;color:#10b981}
+  .hidden{display:none}
+
+  /* Gambar QR */
+  .qr-img{display:block;margin:0 auto;border:1px solid #e5e7eb;border-radius:.5rem;max-width:256px}
+</style>
+@endpush
+
 @section('content')
-<div class="max-w-xl mx-auto p-4">
-  <h1 class="text-2xl font-semibold mb-3">Pembayaran</h1>
-
-  <div id="status" class="text-sm text-gray-700 mb-4">Memuat…</div>
-
-  {{-- QRIS box --}}
-  <div id="qrisBox" class="border rounded p-4 mb-4 hidden">
-    <h2 class="font-medium mb-3">Scan QRIS</h2>
-    <img id="qrisImg" class="mx-auto border rounded" alt="QRIS" width="256" height="256" />
-    <p id="qrisErr" class="text-xs text-red-600 mt-2 hidden">QRIS belum tersedia/expired.</p>
-    <div class="mt-2">
-      <button id="refreshQris" type="button" class="btn btn--ghost">Refresh QR</button>
-    </div>
-  </div>
-
-  {{-- E-Money box (GoPay / ShopeePay) --}}
-  <div id="ewalletBox" class="border rounded p-4 mb-4 hidden">
-    <h2 id="ewalletTitle" class="font-medium mb-2">Bayar dengan E-Money</h2>
-
-    <div class="flex items-center gap-2 mb-3">
-      <button id="openPayBtn" type="button" class="btn btn--primary">
-        <span class="btn__label">Buka pembayaran</span>
-      </button>
-
-      <button id="copyLink" type="button" class="btn btn--ghost">
-        <span class="btn__label">Copy link</span>
-        <svg id="copyCheck" class="icon-check hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M20 6L9 17l-5-5"></path>
-        </svg>
-      </button>
+<div class="max-w-xl mx-auto p-1">
+  <div class="panel panel--accent">
+    <div class="panel-hd">
+      <svg class="panel-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2Zm1 15h-2v-2h2Zm0-4h-2V7h2Z"/></svg>
+      <div>
+        <h1 class="text-xl font-semibold leading-tight">Pembayaran</h1>
+        <p class="text-sm muted">Selesaikan pembayaran, lalu kredensial hotspot akan muncul otomatis.</p>
+      </div>
     </div>
 
-    {{-- QR hanya untuk GoPay --}}
-    <img id="gopayQr" class="mx-auto border rounded hidden" alt="GoPay QR" width="256" height="256" />
-    <p id="ewalletHint" class="text-xs text-gray-600 mt-2 hidden"></p>
-    <p id="ewalletErr" class="text-xs text-red-600 mt-2 hidden">Link pembayaran tidak tersedia.</p>
-  </div>
+    {{-- Status Pembayaran --}}
+    <div class="subcard mb-3">
+      <div class="subcard-hd">Status Pembayaran</div>
+      <div class="subcard-bd">
+        <div id="status" class="text-sm text-gray-700">Memuat…</div>
+      </div>
+    </div>
 
-  {{-- Kredensial hotspot (muncul setelah paid) --}}
-  <div id="credBox" class="rounded border p-3 hidden">
-    <h2 class="font-medium mb-2">Akun Hotspot Kamu</h2>
-    <p>Username: <code id="u"></code></p>
-    <p>Password: <code id="p"></code></p>
+    {{-- QRIS box --}}
+    <div id="qrisBox" class="subcard mb-3 hidden">
+      <div class="subcard-hd">Scan QRIS</div>
+      <div class="subcard-bd">
+        <img id="qrisImg" class="qr-img" alt="QRIS" width="256" height="256" />
+        <p id="qrisErr" class="text-xs text-red-600 mt-2 hidden">QRIS belum tersedia/expired.</p>
+        <div class="mt-2">
+          <button id="refreshQris" type="button" class="btn btn--ghost">Refresh QR</button>
+        </div>
+      </div>
+    </div>
 
-    <p class="text-xs text-gray-600 mt-2">
-      @verbatim
-      <span id="hintMode"></span>
-      @endverbatim
-    </p>
+    {{-- E-Money box (GoPay / ShopeePay) --}}
+    <div id="ewalletBox" class="subcard mb-3 hidden">
+      <div class="subcard-hd"><span id="ewalletTitle">Bayar dengan E-Money</span></div>
+      <div class="subcard-bd">
+        <div class="flex items-center gap-2 mb-3">
+          <button id="openPayBtn" type="button" class="btn btn--primary">
+            <span class="btn__label">Buka pembayaran</span>
+          </button>
+
+          <button id="copyLink" type="button" class="btn btn--ghost">
+            <span class="btn__label">Copy link</span>
+            <svg id="copyCheck" class="icon-check hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20 6L9 17l-5-5"></path>
+            </svg>
+          </button>
+        </div>
+
+        {{-- QR hanya untuk GoPay --}}
+        <img id="gopayQr" class="qr-img hidden" alt="GoPay QR" width="256" height="256" />
+        <p id="ewalletHint" class="text-xs text-gray-600 mt-2 hidden"></p>
+        <p id="ewalletErr" class="text-xs text-red-600 mt-2 hidden">Link pembayaran tidak tersedia.</p>
+      </div>
+    </div>
+
+    {{-- Kredensial hotspot (muncul setelah paid) --}}
+    <div id="credBox" class="subcard hidden">
+      <div class="subcard-hd">Akun Hotspot Kamu</div>
+      <div class="subcard-bd">
+        <p>Username: <code id="u"></code></p>
+        <p>Password: <code id="p"></code></p>
+        <p class="text-xs text-gray-600 mt-2">
+          @verbatim
+          <span id="hintMode"></span>
+          @endverbatim
+        </p>
+      </div>
+    </div>
+
+    {{-- Catatan --}}
+    <div class="summary mt-3">
+      <div class="summary-row">
+        <span class="muted">Tips</span>
+        <span class="text-right">Jika QR/tautan tidak muncul, klik “Refresh QR” atau “Buka pembayaran”.</span>
+      </div>
+    </div>
   </div>
 </div>
-
-{{-- ikon ceklis minimalis (kalau belum ada di layout) --}}
-<style>
-  .icon-check{ width:1rem; height:1rem; color:#10b981; }
-  .hidden{ display:none }
-</style>
 @endsection
 
 @push('scripts')
@@ -87,8 +132,8 @@
     const gopayQr = document.getElementById('gopayQr');
 
     let deeplinkUrl = null;
-    let pollId = null;          // <- id interval
-    let finished = false;       // <- sudah paid?
+    let pollId = null;
+    let finished = false;
 
     function stopPolling(){
       if (pollId){ clearInterval(pollId); pollId = null; }
@@ -99,13 +144,11 @@
       copyBtn && copyBtn.setAttribute('disabled','disabled');
     }
 
-    // tombol: open tanpa loading
     if (openBtn) openBtn.addEventListener('click', function(){
       if (!deeplinkUrl || finished){ err.classList.remove('hidden'); return; }
       window.open(deeplinkUrl, '_blank', 'noopener');
     });
 
-    // tombol: copy dengan ceklis hijau
     if (copyBtn) copyBtn.addEventListener('click', async function(){
       if (!deeplinkUrl || finished){ err.classList.remove('hidden'); return; }
       const label = copyBtn.querySelector('.btn__label');
@@ -121,7 +164,6 @@
       }
     });
 
-    // refresh QRIS manual (nonaktif saat paid)
     if (refreshQris) refreshQris.addEventListener('click', function(){
       if (finished) return;
       if (!qrisImg) return;
@@ -138,18 +180,17 @@
       const kind = String(d.kind || '').toLowerCase();
       const acts = d.actions ? d.actions : (d.raw && d.raw.actions ? d.raw.actions : null);
 
-      // Normalisasi status
       const norm = String(d.status || d.transaction_status || '').toUpperCase();
       const rawTx = String(d.raw && d.raw.transaction_status || '').toLowerCase();
       const isPaidish = norm === 'PAID' || ['settlement','capture','success'].includes(rawTx);
 
-      // --- QRIS ---
+      // QRIS
       const isQris = (payType === 'qris') || (kind === 'qris') || !!d.qr_string;
       if (isQris){
         qrisBox.classList.remove('hidden');
         eBox.classList.add('hidden');
 
-        if (!finished){ // jangan refresh gambar lagi kalau sudah paid
+        if (!finished){
           qrisErr.classList.add('hidden');
           qrisImg.onload = function(){ qrisErr.classList.add('hidden'); };
           qrisImg.onerror = function(){ qrisErr.classList.remove('hidden'); };
@@ -200,7 +241,6 @@
 
       statusEl.textContent = 'Status: ' + (norm || 'PENDING');
 
-      // --- jika sudah paid: stop polling & tampilkan kredensial, kunci UI ---
       if (isPaidish && !finished) {
         finished = true;
         stopPolling();
@@ -229,7 +269,6 @@
       }
     }
 
-    // run pertama & mulai polling
     loadPayment();
     pollId = setInterval(loadPayment, 5000);
   });
