@@ -7,62 +7,39 @@ use App\Models\Payment;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Http\Controllers\Concerns\ResolvesRoleAndClient;
 
 class AdminDashboardController extends Controller
 {
+  use ResolvesRoleAndClient;
+
   public function index(Request $r)
   {
     $tz  = config('app.timezone', 'Asia/Jakarta');
     $now = Carbon::now($tz);
 
-    $user = $r->user();
+    $user         = $r->user();
+    $isAdmin      = $this->userIsAdmin($user);
+    $clientFilter = $this->resolveClientId($user, ''); // admin: '', user: client-nya
 
-    // === Role flags ===
-    $isSuperAdmin = method_exists($user, 'isSuperAdmin') ? $user->isSuperAdmin() : ((string)($user->role ?? 'user') === 'superadmin');
-    $isAdmin      = method_exists($user, 'isAdmin') ? $user->isAdmin() : ((string)($user->role ?? 'user') === 'admin');
-
-    // Perspektif "admin" untuk rumus fee = admin || superadmin
-    $isAdminPerspective = $isAdmin || $isSuperAdmin;
-
-    // === Akses client (many-to-many) ===
-    // superadmin: tanpa filter (lihat ->when di bawah); selain itu: filter by allowed_client_ids
-    $allowedClientIds = $isSuperAdmin
-      ? []
-      : (property_exists($user, 'allowed_client_ids') ? $user->allowed_client_ids : $user->clients()->pluck('clients.client_id')->map(function ($v) { return strtoupper((string) $v); })->unique()->values()->all());
-
-    // Untuk kompat tampilan lama yang mengharapkan string tunggal:
-    $clientFilter = $isSuperAdmin
-      ? ''
-      : implode(',', $allowedClientIds); // contoh: "CLIENT001,CLIENT002"
-
-    // === Normalisasi konstanta status ===
     $S_PAID    = \defined(\App\Models\Payment::class.'::S_PAID')    ? Payment::S_PAID    : 'PAID';
     $S_PENDING = \defined(\App\Models\Payment::class.'::S_PENDING') ? Payment::S_PENDING : 'PENDING';
 
-    // === Fee expression ===
     $feeDefault = (int) config('pay.admin_fee_flat_default', 0);
     $feeExpr = 'COALESCE(NULLIF(clients.admin_fee_flat, 0), ' . $feeDefault . ')';
 
-    // === Base query (payments) dengan filter akses ===
     $payBase = Payment::query()
-      ->when(!empty($allowedClientIds), function ($q) use ($allowedClientIds) {
-        $q->whereIn('payments.client_id', $allowedClientIds);
-      });
+      ->when($clientFilter !== '', fn($q) => $q->where('payments.client_id', $clientFilter));
 
     $payBaseJoin = (clone $payBase)
       ->leftJoin('clients', 'clients.client_id', '=', 'payments.client_id');
 
-    // === KPI: clients active (hormati akses) ===
+    // KPI
     $clientsActive = Client::query()
-      ->when(!$isSuperAdmin, function ($q) use ($user) {
-        $q->whereHas('users', function ($uq) use ($user) {
-          $uq->where('users.id', $user->id);
-        });
-      })
+      ->when($clientFilter !== '', fn($q) => $q->where('client_id', $clientFilter))
       ->where('is_active', 1)
       ->count();
 
-    // === KPI: payments 24 jam, pending ===
     $payments24h = (clone $payBase)
       ->where('payments.created_at', '>=', $now->copy()->subDay())
       ->count();
@@ -71,18 +48,17 @@ class AdminDashboardController extends Controller
       ->where('payments.status', $S_PENDING)
       ->count();
 
-    // === Today revenue (perspektif admin vs user) ===
     $todayRevenue = (int) (clone $payBaseJoin)
       ->where('payments.status', $S_PAID)
       ->whereBetween('payments.paid_at', [$now->copy()->startOfDay(), $now->copy()->endOfDay()])
       ->selectRaw(
-        'COALESCE(SUM(' . ($isAdminPerspective
+        'COALESCE(SUM(' . ($isAdmin
           ? $feeExpr
           : 'GREATEST(payments.amount - ' . $feeExpr . ', 0)') . '), 0) as s'
       )
       ->value('s');
 
-    // === 7 hari terakhir (seri & top) ===
+    // 7 hari
     $start7 = $now->copy()->subDays(6)->startOfDay();
     $days = [];
     for ($i = 0; $i < 7; $i++) {
@@ -98,7 +74,7 @@ class AdminDashboardController extends Controller
 
     $rawSum = (clone $payBaseJoin)
       ->selectRaw('DATE(payments.paid_at) as d')
-      ->selectRaw(($isAdminPerspective
+      ->selectRaw(($isAdmin
         ? 'SUM(' . $feeExpr . ')'
         : 'SUM(GREATEST(payments.amount - ' . $feeExpr . ', 0))'
       ) . ' as s')
@@ -116,8 +92,7 @@ class AdminDashboardController extends Controller
     }
     $total7Revenue = array_sum($seriesSum);
 
-    if ($isAdminPerspective) {
-      // admin & superadmin: TOP by fee
+    if ($isAdmin) {
       $topClients7 = (clone $payBaseJoin)
         ->where('payments.status', $S_PAID)
         ->where('payments.paid_at', '>=', $now->copy()->subDays(7)->startOfDay())
@@ -127,7 +102,6 @@ class AdminDashboardController extends Controller
         ->limit(5)
         ->get();
     } else {
-      // user: total net (gabungan semua client yang ia miliki)
       $sumClient7 = (int) (clone $payBaseJoin)
         ->where('payments.status', $S_PAID)
         ->where('payments.paid_at', '>=', $now->copy()->subDays(7)->startOfDay())
@@ -135,12 +109,12 @@ class AdminDashboardController extends Controller
         ->value('total_net');
 
       $topClients7 = collect([(object)[
-        'client_id' => $clientFilter, // string gabungan utk kompat tampilan lama
+        'client_id' => $clientFilter,
         'total'     => $sumClient7,
       ]]);
     }
 
-    // === Bulan berjalan ===
+    // Bulan berjalan
     $monthStart = $now->copy()->startOfMonth();
     $monthEnd   = $now->copy()->endOfDay();
 
@@ -148,7 +122,7 @@ class AdminDashboardController extends Controller
       ->where('payments.status', $S_PAID)
       ->whereBetween('payments.paid_at', [$monthStart, $monthEnd])
       ->selectRaw(
-        'COALESCE(SUM(' . ($isAdminPerspective
+        'COALESCE(SUM(' . ($isAdmin
           ? $feeExpr
           : 'GREATEST(payments.amount - ' . $feeExpr . ', 0)') . '), 0) as s'
       )
@@ -170,7 +144,7 @@ class AdminDashboardController extends Controller
 
     $rawSumM = (clone $payBaseJoin)
       ->selectRaw('DATE(payments.paid_at) as d')
-      ->selectRaw(($isAdminPerspective
+      ->selectRaw(($isAdmin
         ? 'SUM(' . $feeExpr . ')'
         : 'SUM(GREATEST(payments.amount - ' . $feeExpr . ', 0))'
       ) . ' as s')
@@ -188,7 +162,7 @@ class AdminDashboardController extends Controller
     }
     $totalMonthRevenue = array_sum($seriesSumM);
 
-    if ($isAdminPerspective) {
+    if ($isAdmin) {
       $topClientsM = (clone $payBaseJoin)
         ->where('payments.status', $S_PAID)
         ->whereBetween('payments.paid_at', [$monthStart, $monthEnd])
@@ -210,7 +184,6 @@ class AdminDashboardController extends Controller
       ]]);
     }
 
-    // === Recent payments ===
     $recentPayments = (clone $payBase)
       ->orderByDesc('payments.created_at')
       ->limit(8)
@@ -226,16 +199,13 @@ class AdminDashboardController extends Controller
       'seriesCount',
       'seriesSum',
       'recentPayments',
-      // flags
-      'isAdminPerspective',
+      'isAdmin',
       'clientFilter',
-      // month
       'monthRevenue',
       'monthDays',
       'seriesCountM',
       'seriesSumM',
       'topClientsM',
-      // totals
       'total7Revenue',
       'totalMonthRevenue'
     ));
