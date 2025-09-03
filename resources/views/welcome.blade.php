@@ -1,11 +1,11 @@
-@extends('layouts.app')
+@extends('layouts.landing')
 @section('title','AdaPay — Selamat Datang')
 
 @push('head')
 <style>
   #welcome-landing{
-    --px: clamp(16px,5vw,40px);
-    --py: clamp(40px,8vw,84px);
+    --px: clamp(20px, 4vw, 48px);
+    --py: clamp(56px, 7vw, 96px);
 
     /* base */
     --ink:#0f172a; --muted:#64748b;
@@ -23,15 +23,14 @@
     --glass-tx: #ffffff;
   }
 
-  #welcome-landing{
-    margin-top:-1.5rem; margin-bottom:-1.5rem; color:var(--ink);
-  }
-
   /* full-bleed stabil */
   #welcome-landing .full-bleed{
     width:100vw; margin-left:calc(50% - 50vw); margin-right:calc(50% - 50vw); position:relative;
   }
   #welcome-landing .band{ position:relative; isolation:isolate; padding:var(--py) var(--px); }
+  #welcome-landing .band:first-child {
+    padding-top: calc(var(--py) + var(--header-h));
+  }
   #welcome-landing .wrap{ max-width:1120px; margin:0 auto; }
 
   /* layer dasar setiap band */
@@ -214,6 +213,28 @@
     outline-offset:2px;
   }
 
+  /* Pastikan aturan khusus ini diletakkan SETELAH aturan .btn:hover yang umum */
+  #welcome-landing .btn.btn--track{
+    border:1px solid rgba(255,255,255,.18);
+    background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.06));
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    color:#fff;
+    transition: transform .2s ease, filter .2s ease, background .2s ease, border-color .2s ease;
+  }
+
+  #welcome-landing .btn.btn--track:hover{
+    /* bikin perubahan yang terlihat saat hover */
+    border-color: rgba(255,255,255,.35);
+    background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,.10));
+    filter: brightness(1.06);
+    transform: translateY(-1px); /* kasih sedikit “lift” */
+  }
+
+  #welcome-landing .btn.btn--track:active{
+    transform: translateY(0);
+  }
+
   /* Pastikan grid item FAQ tidak ikut stretch */
   #welcome-landing .faq-grid{
     align-items:start; /* penting */
@@ -306,8 +327,7 @@
               <span class="spinner hidden" aria-hidden="true"></span>
             </a>
             <a href="{{ url('/orders/track') }}"
-               class="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white hover:brightness-110"
-               style="border:1px solid rgba(255,255,255,.18);background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.06));backdrop-filter:blur(6px)">
+               class="btn btn--track">
               <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a5 5 0 0 1 5 5c0 4.25-5 11-5 11S7 11.25 7 7a5 5 0 0 1 5-5Zm0 7.5A2.5 2.5 0 1 0 12 4a2.5 2.5 0 0 0 0 5.5ZM5 20.5a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg>
               Lacak Pesanan
             </a>
