@@ -51,7 +51,7 @@
 
 @section('content')
 @php $cols = (!empty($isAdmin) && $isAdmin) ? 4 : 3; @endphp
-<div class="kpis" style="grid-template-columns: repeat({{ $cols }}, minmax(0, 1fr));">
+<div class="kpis">
   <div class="kpi">
     <div class="label">Login sebagai</div>
     <div class="value" title="{{ auth()->user()->email }}">{{ auth()->user()->name }}</div>
