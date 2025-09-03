@@ -78,13 +78,13 @@
       }
 
       /* Ghost khusus landing (teks putih di atas hero) */
-      .-landing-landing{
+      .btn--ghost-landing{
         background:rgba(255,255,255,.12);
         color:#fff;
         border:1px solid rgba(255,255,255,.35);
         box-shadow:0 2px 6px rgba(0,0,0,.12);
       }
-      .-landing-landing:hover{
+      .btn--ghost-landing:hover{
         background:rgba(255,255,255,.20);
         border-color:rgba(255,255,255,.5);
       }
