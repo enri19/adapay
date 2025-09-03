@@ -1,4 +1,5 @@
 <?php
+// app/Models/Client.php
 
 namespace App\Models;
 
@@ -6,48 +7,53 @@ use Illuminate\Database\Eloquent\Model;
 
 class Client extends Model
 {
-    protected $guarded = [];
+  protected $guarded = [];
 
-    protected $casts = [
-        'enable_push'    => 'boolean',
-        'is_active'      => 'boolean',
-        'router_port'    => 'integer',
-        'hotspot_portal' => 'string',
-        'admin_fee_flat' => 'integer',
-    ];
+  protected $casts = [
+    'enable_push'    => 'boolean',
+    'is_active'      => 'boolean',
+    'router_port'    => 'integer',
+    'hotspot_portal' => 'string',
+    'admin_fee_flat' => 'integer',
+  ];
 
-    // Mutator Laravel 8: trim & "" -> null
-    public function setHotspotPortalAttribute($value)
-    {
-        if ($value === null) {
-            $this->attributes['hotspot_portal'] = null;
-            return;
-        }
-        $v = trim((string) $value);
-        $this->attributes['hotspot_portal'] = ($v === '') ? null : $v;
+  public function users()
+  {
+    return $this->belongsToMany(
+      User::class,
+      'user_client',
+      'client_id', // pivot -> clients.client_id
+      'user_id',   // pivot -> users.id
+      'client_id', // local key clients
+      'id'         // related key users
+    );
+  }
+
+  public function setHotspotPortalAttribute($value): void
+  {
+    $v = $value === null ? null : trim((string) $value);
+    $this->attributes['hotspot_portal'] = ($v === '') ? null : $v;
+  }
+
+  public function scopeVisibleTo($q, User $viewer)
+  {
+    if ($viewer->isSuperAdmin()) {
+      return $q;
     }
 
-    // Scopes optional
-    public function scopeHasHotspotPortal($q)
-    {
-        return $q->whereNotNull('hotspot_portal')->where('hotspot_portal', '!=', '');
-    }
+    return $q->whereHas('users', function ($uq) use ($viewer) {
+      $uq->where('users.id', $viewer->id);
+    });
+  }
 
-    public function scopePortal($q, $portal)
-    {
-        return $q->where('hotspot_portal', $portal);
-    }
+  public function getHotspotPortalEffectiveAttribute()
+  {
+    return $this->hotspot_portal ?: config('hotspot.portal_default');
+  }
 
-    public function getHotspotPortalEffectiveAttribute()
-    {
-        // fallback ke config kalau kolom null/kosong
-        return $this->hotspot_portal ?: config('hotspot.portal_default');
-    }
-
-    public function getHotspotPortalHostAttribute()
-    {
-        $url = $this->hotspot_portal ?: config('hotspot.portal_default');
-        return $url ? parse_url($url, PHP_URL_HOST) : null;
-    }
-
+  public function getHotspotPortalHostAttribute()
+  {
+    $url = $this->hotspot_portal ?: config('hotspot.portal_default');
+    return $url ? parse_url($url, PHP_URL_HOST) : null;
+  }
 }

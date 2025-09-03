@@ -1,6 +1,35 @@
 @extends('layouts.admin')
 @section('title', ($user->exists ? 'Edit' : 'Tambah').' User')
 
+@push('head')
+<style>
+  .select--multi {
+    width: 100%;
+    min-height: 160px;
+    border: 1px solid #d1d5db;
+    border-radius: .5rem;
+    padding: .25rem;
+    background: #f9fafb;
+    font-size: .9rem;
+    line-height: 1.4;
+  }
+  .select--multi option {
+    padding: .35rem .5rem;
+    border-radius: .25rem;
+    margin: 2px 0;
+    cursor: pointer;
+  }
+  .select--multi option:checked {
+    background-color: #0284c7;
+    color: #fff;
+    font-weight: 600;
+  }
+  .select--multi option:hover {
+    background-color: #e0f2fe;
+  }
+</style>
+@endpush
+
 @section('content')
 <div class="container">
   <div class="card">
@@ -51,18 +80,18 @@
         </div>
 
         <div>
-          <label class="label">Client (opsional)</label>
+          <label class="label">Clients (opsional)</label>
           <div class="control">
-            <select class="select" name="client_id">
-              <option value="">— Tidak terkait —</option>
-              @foreach($clients as $c)
-                <option value="{{ $c->client_id }}" {{ old('client_id',$user->client_id) === $c->client_id ? 'selected':'' }}>
-                  {{ $c->client_id }} — {{ $c->name }}
+            <select name="client_ids[]" class="select select--multi" multiple size="8">
+              @foreach($allClients as $cl)
+                <option value="{{ $cl->client_id }}"
+                  {{ in_array($cl->client_id, old('client_ids', $user->allowed_client_ids ?? []), true) ? 'selected' : '' }}>
+                  {{ $cl->client_id }} — {{ $cl->name }}
                 </option>
               @endforeach
             </select>
           </div>
-          <div class="help">User biasa sebaiknya terikat ke client untuk pembatasan data.</div>
+          <div class="help">Tahan Ctrl/⌘ untuk memilih lebih dari satu client.</div>
         </div>
 
         <div>
