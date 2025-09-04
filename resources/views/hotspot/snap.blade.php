@@ -41,6 +41,16 @@
 
   select:disabled{ background:#f9fafb; color:#6b7280; }
 </style>
+
+{{-- Midtrans Snap JS (pakai LIVE URL, ganti ke sandbox kalau butuh) --}}
+@php $isProd = (bool) (config('midtrans.is_production') ?? env('MIDTRANS_IS_PRODUCTION', false)); @endphp
+@if($isProd)
+  <script src="https://app.midtrans.com/snap/snap.js"
+          data-client-key="{{ config('midtrans.client_key') ?? env('MIDTRANS_CLIENT_KEY') }}"></script>
+@else
+  <script src="https://app.sandbox.midtrans.com/snap/snap.js"
+          data-client-key="{{ config('midtrans.client_key_sandbox') ?? env('MIDTRANS_CLIENT_KEY') }}"></script>
+@endif
 @endpush
 
 @section('content')
@@ -82,7 +92,7 @@
       {{-- Hidden client_id: satu saja, kosong jika belum pilih --}}
       <input type="hidden" id="client_id" name="client_id" value="{{ $resolvedClientId ?? '' }}">
 
-      {{-- Subcard: Voucher (SELALU render select) --}}
+      {{-- Subcard: Voucher --}}
       <div class="subcard">
         <div class="subcard-hd">Pilih Voucher</div>
         <div class="subcard-bd">
@@ -137,41 +147,19 @@
         </div>
       </div>
 
-      {{-- Subcard: Metode Pembayaran --}}
+      {{-- (UI metode tetap dibiarkan; Snap akan menampilkan channel yang aktif saja) --}}
       <div class="subcard">
         <div class="subcard-hd">Metode Pembayaran</div>
         <div class="subcard-bd">
-          {{-- QRIS (disarankan) --}}
           <div class="pay-section">
             <div class="pay-header">
-              <div class="pay-title">QRIS <span class="text-xs font-normal text-emerald-700 px-2 py-0.5 border rounded-full">Disarankan</span></div>
-              <div class="pay-desc">Pembayaran DANA & e-wallet lain via scan QR dari m-banking/e-wallet.</div>
+              <div class="pay-title">Metode via Snap</div>
+              <div class="pay-desc">Metode yang muncul menyesuaikan channel aktif di Midtrans.</div>
             </div>
-            <div class="pay-methods" role="radiogroup" aria-label="QRIS">
-              <label class="pm-card" data-value="qris" tabindex="0" role="radio" aria-checked="true">
-                <input class="pm-radio" type="radio" name="method" value="qris" checked>
-                <img class="pm-logo" src="{{ asset('images/pay/qris.svg') }}" alt="QRIS"
-                     onerror="this.replaceWith(document.createTextNode('QRIS'))">
-              </label>
-            </div>
-          </div>
-
-          {{-- E-Wallet langsung --}}
-          <div class="pay-section">
-            <div class="pay-header">
-              <div class="pay-title">E-Wallet langsung</div>
-              <div class="pay-desc">Bayar langsung di aplikasi (tanpa scan QR).</div>
-            </div>
-            <div class="pay-methods" role="radiogroup" aria-label="E-Wallet">
-              <label class="pm-card" data-value="gopay" tabindex="0" role="radio" aria-checked="false">
-                <input class="pm-radio" type="radio" name="method" value="gopay">
-                <img class="pm-logo" src="{{ asset('images/pay/gopay.svg') }}" alt="GoPay"
-                     onerror="this.replaceWith(document.createTextNode('GoPay'))">
-              </label>
-              <label class="pm-card" data-value="shopeepay" tabindex="0" role="radio" aria-checked="false">
-                <input class="pm-radio" type="radio" name="method" value="shopeepay">
-                <img class="pm-logo" src="{{ asset('images/pay/shopeepay.svg') }}" alt="ShopeePay"
-                     onerror="this.replaceWith(document.createTextNode('ShopeePay'))">
+            <div class="pay-methods" role="radiogroup" aria-label="Snap">
+              <label class="pm-card" data-value="snap" tabindex="0" role="radio" aria-checked="true">
+                <input class="pm-radio" type="radio" name="method" value="snap" checked>
+                <span class="text-sm font-medium">Snap Checkout</span>
               </label>
             </div>
           </div>
@@ -186,7 +174,7 @@
         </div>
         <div class="summary-row">
           <span>Metode</span>
-          <span id="sumMethod">QRIS</span>
+          <span id="sumMethod">Snap</span>
         </div>
         <hr class="my-2 border-blue-100">
         <div class="summary-row summary-total">
@@ -227,6 +215,10 @@
   const sanitizeClientId = s => String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);
   const rupiah = n => 'Rp' + Math.max(0,parseInt(n||0,10)).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.');
 
+  // Endpoint
+  const API_VOUCHERS_URL = "{{ url('/api/hotspot/vouchers') }}";
+  const API_SNAP_URL     = "{{ url('/api/payments/snap') }}";
+
   function setLoading(btn,on,txt){
     if(!btn) return;
     const label=btn.querySelector('.btn__label'), spin=btn.querySelector('.spinner');
@@ -236,7 +228,7 @@
     if(label){ if(btn.__orig==null) btn.__orig=label.textContent; label.textContent=(on&&txt)?txt:btn.__orig; }
   }
 
-  // ===== Elements (beberapa pakai getter agar selalu up-to-date) =====
+  // ===== Elements =====
   const formEl   = $('#frm');
   const selClient= $('#clientSelect');
   const hidClient= $('#client_id');
@@ -251,25 +243,19 @@
   const sumTotal = $('#sumTotal');
   const sumMethod= $('#sumMethod');
 
-  const API_VOUCHERS_URL = "{{ url('/api/hotspot/vouchers') }}";
-  const API_CHECKOUT_URL = "{{ url('/api/hotspot/checkout') }}";
-
-  // Getter supaya aman walau markup awal kosong
   function getVoucherSel(){ return document.getElementById('voucherSelect'); }
 
-  // ===== Client resolver =====
+  // Client resolver
   function getResolvedClientId(){
-    // Subdomain → pakai subdomain pertama (c1.pay.adanih.info)
     if (!isBaseHost()){
       const parts = location.hostname.split('.');
       return (parts.length > 3 && parts[0]) ? sanitizeClientId(parts[0]) : '';
     }
-    // BASE HOST → JANGAN baca dari <select>, cuma dari ?client=
     const q = new URLSearchParams(location.search).get('client') || '';
     return sanitizeClientId(q);
   }
 
-  // ===== Validasi sederhana =====
+  // Validasi sederhana
   function errElFor(input){ const id=(input?.id||'').replace(/^fld/,'err'); return document.getElementById(id); }
   function showFieldError(input,msg){
     const err=errElFor(input); if(!err||!input) return;
@@ -297,11 +283,8 @@
     return {msg:'',norm};
   }
 
-  // ===== Ringkasan =====
-  function currentMethod(){
-    const r=document.querySelector('.pm-radio:checked');
-    return (r && (r.value||'').toUpperCase()) || 'QRIS';
-  }
+  // Ringkasan
+  function currentMethod(){ return 'SNAP'; }
   function updateSummary(){
     const vSel = getVoucherSel();
     const opt  = vSel ? vSel.options[vSel.selectedIndex] : null;
@@ -309,10 +292,17 @@
     const price= opt ? parseInt(opt.getAttribute('data-price') || 0,10) : 0;
     if (sumName)   sumName.textContent  = name;
     if (sumTotal)  sumTotal.textContent = rupiah(price);
-    if (sumMethod) sumMethod.textContent= currentMethod();
+    if (sumMethod) sumMethod.textContent= 'Snap';
   }
 
-  // ===== Voucher AJAX =====
+  function getSelectedAmount(){
+    const vSel = getVoucherSel();
+    if (!vSel) return 0;
+    const opt = vSel.options[vSel.selectedIndex];
+    return opt ? parseInt(opt.getAttribute('data-price') || 0,10) : 0;
+  }
+
+  // Voucher AJAX
   function rebuildVouchers(list){
     const vSel = document.getElementById('voucherSelect');
     if (!vSel) return;
@@ -320,7 +310,6 @@
     vSel.innerHTML = '';
 
     if (!Array.isArray(list) || list.length === 0){
-      // kosong → kunci & ringkasan reset
       vSel.disabled = true;
       if (payBtn) payBtn.disabled = true;
       if (noVoucher) noVoucher.classList.remove('hidden');
@@ -331,7 +320,6 @@
 
     if (noVoucher) noVoucher.classList.add('hidden');
 
-    // placeholder supaya tidak auto-pilih
     const ph = document.createElement('option');
     ph.value = '';
     ph.textContent = '— Pilih Voucher —';
@@ -339,7 +327,6 @@
     ph.selected = true;
     vSel.appendChild(ph);
 
-    // tambahkan opsi voucher
     for (const v of list){
       const o = document.createElement('option');
       o.value = v.id;
@@ -350,8 +337,7 @@
     }
 
     vSel.disabled = false;
-    if (payBtn) payBtn.disabled = true; // tetap terkunci sampai user pilih
-    // ringkasan tetap Rp0/— sampai user memilih
+    if (payBtn) payBtn.disabled = true;
   }
 
   async function fetchVouchers(cid){
@@ -376,20 +362,14 @@
     }
   }
 
-  // ===== Init =====
+  // Init
   document.addEventListener('DOMContentLoaded', function(){
-    // Base host tanpa pilihan → kunci UI
     if (isBaseHost()){
       const q = new URLSearchParams(location.search).get('client') || '';
       if (!q) {
-        // Pastikan UI benar2 kosong → voucher kosong & select client tetap placeholder
         if (selClient) {
-          // paksa ke placeholder
-          if (selClient.querySelector('option[value=""]')) {
-            selClient.value = '';
-          } else {
-            selClient.selectedIndex = -1; // tidak memilih apapun
-          }
+          if (selClient.querySelector('option[value=""]')) { selClient.value = ''; }
+          else { selClient.selectedIndex = -1; }
         }
         const vSel = document.getElementById('voucherSelect');
         if (vSel) { vSel.disabled = true; vSel.innerHTML = ''; }
@@ -399,27 +379,20 @@
         if (sumName)  sumName.textContent  = '—';
         if (sumTotal) sumTotal.textContent = 'Rp0';
       } else {
-        // Ada ?client= → sinkronkan select (kalau opsinya ada)
         if (selClient) selClient.value = q;
         if (hidClient) hidClient.value = q;
-        // kamu boleh panggil fetchVouchers(q) di sini kalau mau preload
       }
     } else {
-      // mode subdomain
       const cid = getResolvedClientId();
       if (hidClient) hidClient.value = cid;
     }
 
-    // Bersihkan onchange lama agar tidak reload
     if (selClient){
-      // pastikan tidak reload halaman
       if (selClient.hasAttribute('onchange')) selClient.removeAttribute('onchange');
       selClient.onchange = null;
 
       selClient.addEventListener('change', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-
+        e.preventDefault(); e.stopPropagation();
         const newCid = selClient.value ? sanitizeClientId(selClient.value) : '';
 
         if (!newCid){
@@ -441,7 +414,6 @@
         url.searchParams.set('client', newCid);
         history.replaceState(null, '', url.toString());
 
-        // 2) sinkron & load voucher
         if (hidClient) hidClient.value = newCid;
         if (noVoucher) { noVoucher.textContent = 'Memuat voucher…'; noVoucher.classList.remove('hidden'); }
         fetchVouchers(newCid);
@@ -449,7 +421,6 @@
       }, true);
     }
 
-    // saat ganti voucher → enable tombol & update ringkasan
     const vSelInit = document.getElementById('voucherSelect');
     if (vSelInit){
       vSelInit.addEventListener('change', function(){
@@ -457,12 +428,10 @@
         if (payBtn) payBtn.disabled = !hasValue;
         updateSummary();
       });
-      // sinkron state awal (kalau disabled/placeholder)
       if (payBtn) payBtn.disabled = !(vSelInit.value);
       updateSummary();
     }
 
-    // Validasi realtime
     if (nameInput){
       nameInput.addEventListener('input', ()=>showFieldError(nameInput, validateName(nameInput)));
       nameInput.addEventListener('blur',  ()=>showFieldError(nameInput, validateName(nameInput)));
@@ -472,37 +441,12 @@
       phoneInput.addEventListener('blur',  ()=>showFieldError(phoneInput, validatePhone(phoneInput).msg));
     }
 
-    // Ringkasan awal & listener voucher
     const vSel = getVoucherSel();
     if (vSel) vSel.addEventListener('change', updateSummary);
     updateSummary();
-
-    // Toggle metode pembayaran (untuk update metode di ringkasan)
-    function setChecked(card){
-      $$('.pm-card').forEach(c=>{
-        c.setAttribute('aria-checked','false');
-        const r=c.querySelector('.pm-radio'); if(r) r.checked=false;
-      });
-      card.setAttribute('aria-checked','true');
-      const radio=card.querySelector('.pm-radio'); if(radio) radio.checked=true;
-      updateSummary();
-    }
-    const current=document.querySelector('.pm-radio:checked');
-    if (current){ const card=current.closest('.pm-card'); if(card) setChecked(card); }
-    $$('.pay-methods').forEach(group=>{
-      group.addEventListener('click', e=>{
-        const card=e.target.closest('.pm-card'); if(!card) return; setChecked(card);
-      });
-      group.addEventListener('keydown', e=>{
-        if (e.key===' ' || e.key==='Enter'){
-          const card=e.target.closest('.pm-card'); if(!card) return;
-          e.preventDefault(); setChecked(card);
-        }
-      });
-    });
   });
 
-  // ===== Submit checkout =====
+  // Submit → Snap
   window.startCheckout = async function(e){
     e.preventDefault();
     if (errBox){ errBox.classList.add('hidden'); errBox.textContent=''; }
@@ -522,66 +466,70 @@
       return false;
     }
 
-    if (hidClient) hidClient.value = cid;
+    const amount = getSelectedAmount();
+    if (!amount || amount < 1000){
+      if (errBox){ errBox.textContent = 'Nominal tidak valid.'; errBox.classList.remove('hidden'); }
+      return false;
+    }
 
     const payload = {
-      voucher_id: Number(vSel.value),
-      method: (document.querySelector('.pm-radio:checked')?.value || 'qris').toLowerCase(),
-      name: String(nameInput.value||'').trim(),
+      amount,
+      name:  String(nameInput.value||'').trim(),
       email: emailInput ? (emailInput.value||null) : null,
       phone: phoneNorm || String(phoneInput.value||'').trim(),
+      voucher_id: Number(vSel.value),
       client_id: cid,
+      // optional: enabled_payments → bisa kamu isi dari pilihan user kalau mau memaksa channel tertentu
+      // enabled_payments: ['bni_va','bri_va','permata_va','gopay','shopeepay']
     };
 
-    setLoading(payBtn, true, 'Memproses…');
-
-    const ctrl = new AbortController();
-    const timer = setTimeout(()=>ctrl.abort(), 20000);
+    setLoading(payBtn, true, 'Membuat transaksi…');
 
     try{
-      const res = await fetch(API_CHECKOUT_URL, {
+      const res = await fetch(API_SNAP_URL, {
         method:'POST',
         headers:{ 'Content-Type':'application/json','Accept':'application/json' },
-        body: JSON.stringify(payload),
-        signal: ctrl.signal
+        body: JSON.stringify(payload)
       });
-      const text = await res.text();
-      let data; try{ data = JSON.parse(text); }catch{ throw new Error('RESP_INVALID: ' + text.slice(0,120)); }
+      const data = await res.json();
 
       if (!res.ok){
-        if (res.status === 422) {
-          const errs = (data && data.errors) || {};
-          if (errs.name && errs.name[0])  showFieldError(nameInput,  errs.name[0]);
-          if (errs.phone && errs.phone[0]) showFieldError(phoneInput, errs.phone[0]);
-          const msg = data.message || errs.name?.[0] || errs.phone?.[0] || 'Data tidak valid.';
-          throw new Error(msg);
-        }
-        const code = data.error || 'CHECKOUT_FAILED';
-        let msg = data.message || 'Gagal membuat transaksi.';
-        if(code==='UPSTREAM_TEMPORARY') msg='Channel pembayaran sedang gangguan. Coba lagi.';
-        if(code==='CHANNEL_INACTIVE')  msg='Channel belum aktif di dashboard Midtrans.';
-        if(code==='POP_REQUIRED')      msg='Akun butuh PoP/aktivasi tambahan di Midtrans.';
-        throw new Error(msg);
+        throw new Error(data.message || 'Gagal membuat transaksi.');
       }
 
-      const orderId = data.order_id || (data.midtrans && data.midtrans.order_id);
-      if(!orderId) throw new Error('Order ID tidak ditemukan.');
+      const orderId   = data.order_id;
+      const snapToken = data.snap_token;
+      const redirect  = data.redirect_url;
 
-      setLoading(payBtn, true, 'Mengarahkan…');
-      location.href = '/hotspot/order/' + encodeURIComponent(orderId);
+      if (!orderId || !snapToken){
+        throw new Error('Token Snap tidak ditemukan.');
+      }
+
+      setLoading(payBtn, false);
+
+      // Popup Snap; fallback redirect jika snap.js tidak tersedia
+      if (window.snap && typeof window.snap.pay === 'function'){
+        window.snap.pay(snapToken, {
+          onSuccess: function(){ location.href = '/hotspot/order/'+encodeURIComponent(orderId); },
+          onPending: function(){ location.href = '/hotspot/order/'+encodeURIComponent(orderId); },
+          onError:   function(){ location.href = '/hotspot/order/'+encodeURIComponent(orderId)+'?error=1'; },
+          onClose:   function(){ /* user menutup popup */ }
+        });
+      } else if (redirect){
+        location.href = redirect;
+      } else {
+        location.href = '/hotspot/order/'+encodeURIComponent(orderId);
+      }
+
       return false;
 
     }catch(e){
       setLoading(payBtn, false);
       if (errBox){
-        errBox.textContent = (e.name === 'AbortError')
-          ? 'Koneksi lambat atau server tidak merespons. Coba lagi.'
-          : (e.message || 'Terjadi kesalahan.');
+        errBox.textContent = e.message || 'Terjadi kesalahan.';
         errBox.classList.remove('hidden');
       }
       return false;
-    }finally{
-      clearTimeout(timer);
     }
   };
 })();
