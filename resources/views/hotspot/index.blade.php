@@ -43,7 +43,14 @@
 </style>
 
 {{-- Midtrans Snap JS (pakai LIVE URL, ganti ke sandbox kalau butuh) --}}
-<script src="https://app.midtrans.com/snap/snap.js" data-client-key="{{ config('midtrans.client_key') ?? env('MIDTRANS_CLIENT_KEY') }}"></script>
+@php $isProd = (bool) (config('midtrans.is_production') ?? env('MIDTRANS_IS_PRODUCTION', false)); @endphp
+@if($isProd)
+  <script src="https://app.midtrans.com/snap/snap.js"
+          data-client-key="{{ config('midtrans.client_key') ?? env('MIDTRANS_CLIENT_KEY') }}"></script>
+@else
+  <script src="https://app.sandbox.midtrans.com/snap/snap.js"
+          data-client-key="{{ config('midtrans.client_key_sandbox') ?? env('MIDTRANS_CLIENT_KEY') }}"></script>
+@endif
 @endpush
 
 @section('content')
