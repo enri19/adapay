@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Komponen kustom (biar gak kepurge) */
+@layer components {
+  .btn { @apply inline-flex items-center gap-2 px-3 py-2 rounded text-sm font-semibold border border-gray-200 bg-white text-gray-700; }
+  .btn--primary { @apply bg-sky-600 text-white border-transparent hover:bg-sky-700; }
+  .btn--ghost { @apply bg-white text-sky-700 border-sky-100 hover:bg-sky-50; }
+  .dot { @apply w-1.5 h-1.5 rounded-full; }
+  .dot-pending { @apply bg-amber-500; }
+  .dot-paid { @apply bg-emerald-500; }
+  .dot-expired { @apply bg-red-500; }
+}

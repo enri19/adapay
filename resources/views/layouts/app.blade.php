@@ -8,16 +8,8 @@
     <title>@yield('title', config('app.name', 'Hotspot Portal'))</title>
 
     <!-- Tailwind via CDN (cepat untuk prototipe) -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] }
-          }
-        }
-      }
-    </script>
+    {{-- <script src="https://cdn.tailwindcss.com"></script> --}}
+    <link rel="stylesheet" href="{{ asset('assets/app.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 
@@ -79,67 +71,66 @@
     @stack('head')
   </head>
 
-  <!-- ⬇️ BODY sebagai grid 3-baris agar tinggi konten rapi -->
+  @php
+    $layoutHeader   = $layoutHeader ?? 'full';
+    $hideBack       = $hideBack ?? false; // bisa dioverride dari view/controller
+    $isHotspotIndex = request()->routeIs('hotspot.index') || request()->is('hotspot');
+  @endphp
+
   <body class="min-h-svh grid grid-rows-[auto_1fr_auto] bg-gray-50 text-gray-800">
-    <header class="border-b bg-white/90 backdrop-blur sticky top-0 z-40">
-      @php
-        // hanya sembunyikan di halaman persis /hotspot (bukan subpath)
-        $showBuy = !request()->is('hotspot');
-      @endphp
 
-      <div class="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
-        <a href="{{ url('/') }}" class="flex items-center gap-2">
-          <img src="{{ asset('images/logo.png') }}"
-              alt="{{ config('app.name', 'Hotspot Portal') }}"
-              class="h-8 w-auto object-contain"
-              onerror="this.replaceWith(document.createTextNode('Hotspot'))">
-          <span class="font-semibold">{{ config('app.name', 'Hotspot Portal') }}</span>
-        </a>
+    @if ($layoutHeader !== 'none')
+      <header class="{{ $layoutHeader === 'full' ? 'border-b bg-white/90 backdrop-blur sticky top-0 z-40' : 'bg-white' }}">
+        <div class="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
+          {{-- Logo (selalu tampil) --}}
+          <a href="{{ url('/') }}" class="flex items-center gap-2">
+            <img src="{{ asset('images/logo.png') }}" alt="{{ config('app.name','Hotspot Portal') }}"
+                class="h-8 w-auto object-contain"
+                onerror="this.replaceWith(document.createTextNode('Hotspot'))">
+            <span class="font-semibold">{{ config('app.name','Hotspot Portal') }}</span>
+          </a>
 
-        @php $isBaseHost = strtolower(request()->getHost()) === 'pay.adanih.info'; @endphp
-
-        @if ($showBuy)
-          @if ($isBaseHost)
-            <div class="flex items-center gap-2">
-              <a href="{{ url('/hotspot') }}" class="btn btn--primary">Beli Voucher</a>
-              <a href="{{ route('hotspot.order.demo') }}" class="btn btn--ghost">Coba Demo</a>
-            </div>
-          @else
-            <a href="{{ url('/hotspot') }}" class="btn btn--primary">Beli Voucher</a>
+          @if ($layoutHeader === 'full')
+            {{-- Navigasi penuh seperti semula --}}
+            @php $isBaseHost = strtolower(request()->getHost()) === 'pay.adanih.info'; @endphp
+            @php $showBuy = !request()->is('hotspot'); @endphp
+            @if ($showBuy)
+              @if ($isBaseHost)
+                <div class="flex items-center gap-2">
+                  <a href="{{ url('/hotspot') }}" class="btn btn--primary">Beli Voucher</a>
+                  <a href="{{ route('hotspot.order.demo') }}" class="btn btn--ghost">Coba Demo</a>
+                </div>
+              @else
+                <a href="{{ url('/hotspot') }}" class="btn btn--primary">Beli Voucher</a>
+              @endif
+            @endif
+          @elseif ($layoutHeader === 'minimal')
+            {{-- Header minimal: hanya back optional --}}
+            @unless ($hideBack || $isHotspotIndex)
+              <a href="{{ url('/hotspot') }}" class="text-sm text-sky-700 hover:text-sky-900">Kembali</a>
+            @endunless
           @endif
-        @endif
-      </div> <!-- ✅ TUTUP div container header -->
-    </header>
+        </div>
+      </header>
+    @endif
 
-    <!-- main otomatis mengisi ruang 1fr (tinggi fleksibel) -->
     <main class="max-w-3xl mx-auto px-4 py-6 w-full">
-      {{-- Flash message --}}
-      @if (session('success'))
-        <div class="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-          {{ session('success') }}
-        </div>
-      @endif
-      @if (session('error'))
-        <div class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {{ session('error') }}
-        </div>
-      @endif
-
       @yield('content')
     </main>
 
+    {{-- Footer boleh juga diminin: gunakan pola serupa kalau perlu --}}
     <footer class="py-8 text-xs text-gray-500 border-t bg-white/70 backdrop-blur">
       <div class="max-w-3xl mx-auto px-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div>&copy; {{ date('Y') }} {{ config('app.name', 'Hotspot Portal') }}. All rights reserved.</div>
+        <div>&copy; {{ date('Y') }} {{ config('app.name', 'Hotspot Portal') }}.</div>
         <nav class="flex items-center gap-3">
-          <a href="{{ route('agreement.show') }}" class="underline text-sky-700 hover:text-sky-900">Perjanjian Layanan</a>
+          <a href="{{ route('agreement.show') }}" class="underline text-sky-700 hover:text-sky-900">Perjanjian</a>
           <span class="text-gray-300">•</span>
-          <a href="{{ route('privacy.show') }}" class="underline text-sky-700 hover:text-sky-900">Kebijakan Privasi</a>
+          <a href="{{ route('privacy.show') }}" class="underline text-sky-700 hover:text-sky-900">Privasi</a>
         </nav>
       </div>
     </footer>
 
-    @include('partials.cookie-consent')
     @stack('scripts')
   </body>
+
 </html>

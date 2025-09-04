@@ -7,11 +7,8 @@
     <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}">
     <title>@yield('title', config('app.name', 'Hotspot Portal'))</title>
 
-    {{-- Tailwind + font (sama seperti app) --}}
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = { theme:{ extend:{ fontFamily:{ sans:['Inter','ui-sans-serif','system-ui'] } } } }
-    </script>
+    {{-- Tailwind --}}
+    <link rel="stylesheet" href="{{ asset('assets/app.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 

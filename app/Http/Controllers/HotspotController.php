@@ -46,6 +46,7 @@ class HotspotController extends Controller
       'resolvedClientId' => $selectedClientId, // bisa null
       'isBaseHost'       => $isBaseHost,
       'clients'          => $clients,
+      'layoutHeader'     => 'minimal', // 'full' | 'minimal' | 'none'
     ]);
   }
 
@@ -85,7 +86,10 @@ class HotspotController extends Controller
 
   public function orderView(string $orderId)
   {
-    return view('hotspot.order', compact('orderId'));
+    return view('hotspot.order', [
+      'orderId'      => $orderId,
+      'layoutHeader' => 'minimal',
+    ]);
   }
 
   public function checkout(Request $request)
