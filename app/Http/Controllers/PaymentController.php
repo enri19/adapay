@@ -220,64 +220,75 @@ class PaymentController extends Controller
 
   public function createSnap(Request $r)
   {
-    $data = $r->validate([
-      'amount' => 'required|integer|min:1000',
-      'name'   => 'nullable|string|max:100',
-      'email'  => 'nullable|email',
-      'phone'  => 'nullable|string|max:30',
-    ]);
+      // Init Midtrans
+      \Midtrans\Config::$serverKey    = config('midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY', '');
+      \Midtrans\Config::$isProduction = (bool) (config('midtrans.is_production') ?? env('MIDTRANS_IS_PRODUCTION', false));
+      if (property_exists(\Midtrans\Config::class, 'isSanitized')) \Midtrans\Config::$isSanitized = true;
 
-    $this->initMidtrans();
+      $data = $r->validate([
+          'amount'     => 'required|integer|min:1000',
+          'name'       => 'nullable|string|max:100',
+          'email'      => 'nullable|email',
+          'phone'      => 'nullable|string|max:30',
+          'voucher_id' => 'required|integer',
+          'client_id'  => 'nullable|string|max:50',
+          // opsional: 'enabled_payments' => 'array'
+      ]);
 
-    $orderId = 'ORD-'.now()->format('Ymd-His').'-'.\Str::upper(\Str::random(6));
+      $orderId = 'ORD-'.now()->format('Ymd-His').'-'.\Illuminate\Support\Str::upper(\Illuminate\Support\Str::random(6));
 
-    // simpan dulu PENDING di DB kamu
-    \App\Models\Payment::updateOrCreate(
-      ['order_id' => $orderId],
-      [
-        'provider' => 'midtrans',
-        'amount'   => (int)$data['amount'],
-        'currency' => 'IDR',
-        'status'   => \App\Models\Payment::S_PENDING ?? 'PENDING',
-        'raw'      => [],
-      ]
-    );
+      // simpan dulu PENDING di DB (sesuaikan field model-mu)
+      \App\Models\Payment::updateOrCreate(
+          ['order_id' => $orderId],
+          [
+              'client_id' => $data['client_id'] ?? (\App\Support\OrderId::client($orderId) ?: 'DEFAULT'),
+              'provider'  => 'midtrans',
+              'amount'    => (int) $data['amount'],
+              'currency'  => 'IDR',
+              'status'    => \App\Models\Payment::S_PENDING ?? 'PENDING',
+              'raw'       => ['voucher_id' => $data['voucher_id']],
+          ]
+      );
 
-    $payload = [
-      'transaction_details' => [
-        'order_id'     => $orderId,
-        'gross_amount' => (int)$data['amount'],
-      ],
-      'customer_details' => [
-        'first_name' => $data['name']  ?? null,
-        'email'      => $data['email'] ?? null,
-        'phone'      => $data['phone'] ?? null,
-      ],
-      // Opsional: batasi metode yang tampil.
-      // Kalau dikosongkan, Snap akan otomatis tampilkan yang aktif.
-      // 'enabled_payments' => ['gopay','shopeepay','bni_va','bri_va','permata_va','echannel'],
+      $payload = [
+          'transaction_details' => [
+              'order_id'     => $orderId,
+              'gross_amount' => (int) $data['amount'],
+          ],
+          'customer_details' => [
+              'first_name' => $data['name']  ?? null,
+              'email'      => $data['email'] ?? null,
+              'phone'      => $data['phone'] ?? null,
+          ],
+          // tampilkan hanya channel aktif (biarkan kosong agar Snap auto)
+          // 'enabled_payments' => $r->input('enabled_payments', []),
 
-      // Callback (opsional): halaman “finish” kamu
-      'callbacks' => [
-        'finish' => url('/payments/finish?order_id='.$orderId),
-      ],
-      // Expiry (opsional)
-      'expiry' => [
-        'unit'     => 'minutes',
-        'duration' => 30,
-      ],
-    ];
+          // halaman finish (opsional), kamu bisa arahkan ke detail order
+          'callbacks' => [
+              'finish' => url('/hotspot/order/'.$orderId),
+          ],
+          // masa berlaku transaksi (opsional)
+          'expiry' => [
+              'unit'     => 'minutes',
+              'duration' => 30,
+          ],
+      ];
 
-    $snap = \Midtrans\Snap::createTransaction($payload);
-    // $snap adalah array: ['token' => '...','redirect_url' => '...']
+      try {
+          $snap = \Midtrans\Snap::createTransaction($payload); // ['token','redirect_url']
 
-    // simpan raw minimal
-    \App\Models\Payment::where('order_id', $orderId)->update(['raw' => $snap]);
+          \App\Models\Payment::where('order_id', $orderId)->update([
+              'raw' => array_merge(['snap' => $snap], ['voucher_id' => $data['voucher_id']]),
+          ]);
 
-    return response()->json([
-      'order_id'     => $orderId,
-      'snap_token'   => $snap['token'] ?? null,
-      'redirect_url' => $snap['redirect_url'] ?? null,
-    ], 201);
+          return response()->json([
+              'order_id'     => $orderId,
+              'snap_token'   => $snap['token'] ?? null,
+              'redirect_url' => $snap['redirect_url'] ?? null,
+          ], 201);
+      } catch (\Throwable $e) {
+          \Log::error('snap.create.failed', ['order_id' => $orderId, 'err' => $e->getMessage()]);
+          return response()->json(['error'=>'PAYMENT_CREATE_FAILED','message'=>$e->getMessage()], 502);
+      }
   }
 }
