@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 
 class ContactController extends Controller
 {
@@ -25,7 +26,7 @@ class ContactController extends Controller
       'website.max' => 'Spam detected.', // kalau ada yang isi honeypot
     ]);
 
-    // simple store ke table contact_messages (buat tabelnya kalau belum)
+    // simpan ke database
     DB::table('contact_messages')->insert([
       'name'       => $data['name'],
       'email'      => $data['email'],
@@ -35,6 +36,19 @@ class ContactController extends Controller
       'created_at' => now(),
       'updated_at' => now(),
     ]);
+
+    // kirim email ke support@adanih.info
+    Mail::raw(
+      "Nama: {$data['name']}\n".
+      "Email: {$data['email']}\n".
+      "HP: {$r->input('hp')}\n\n".
+      "Pesan:\n{$data['message']}",
+      function ($msg) use ($data) {
+        $msg->to('support@adanih.info')
+            ->subject('[Contact Form] '.$data['subject'])
+            ->replyTo($data['email'], $data['name']);
+      }
+    );
 
     return back()->with('ok','Pesan kamu sudah kami terima. Kami akan balas di jam kerja.');
   }
