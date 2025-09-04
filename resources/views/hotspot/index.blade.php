@@ -210,7 +210,7 @@
 
   // Endpoint
   const API_VOUCHERS_URL = "{{ url('/api/hotspot/vouchers') }}";
-  const API_SNAP_URL     = "{{ url('/payments/snap') }}"; // server harus mengembalikan {order_id, snap_token, redirect_url}
+  const API_SNAP_URL     = "{{ url('/api/payments/snap') }}";
 
   function setLoading(btn,on,txt){
     if(!btn) return;
