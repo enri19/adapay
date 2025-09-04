@@ -26,8 +26,8 @@ Route::get('/', function () {
 })->name('welcome');
 
 Route::get('/hotspot', [HotspotController::class, 'index'])->name('hotspot.index');
-Route::get('/hotspot/order/{orderId}', [HotspotController::class, 'orderView'])->name('hotspot.order');
 Route::get('/hotspot/order/demo', [OrderDemoController::class, 'show'])->name('hotspot.order.demo');
+Route::get('/hotspot/order/{orderId}', [HotspotController::class, 'orderView'])->name('hotspot.order');
 Route::get('/payments/return', [ReturnController::class, 'show'])->name('payments.return');
 
 Route::get('/contact', [ContactController::class, 'create'])->name('contact.create');
