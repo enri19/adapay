@@ -217,4 +217,67 @@ class PaymentController extends Controller
       ->header('Content-Type', 'image/png')
       ->header('Cache-Control', 'no-store, max-age=0');
   }
+
+  public function createSnap(Request $r)
+  {
+    $data = $r->validate([
+      'amount' => 'required|integer|min:1000',
+      'name'   => 'nullable|string|max:100',
+      'email'  => 'nullable|email',
+      'phone'  => 'nullable|string|max:30',
+    ]);
+
+    $this->initMidtrans();
+
+    $orderId = 'ORD-'.now()->format('Ymd-His').'-'.\Str::upper(\Str::random(6));
+
+    // simpan dulu PENDING di DB kamu
+    \App\Models\Payment::updateOrCreate(
+      ['order_id' => $orderId],
+      [
+        'provider' => 'midtrans',
+        'amount'   => (int)$data['amount'],
+        'currency' => 'IDR',
+        'status'   => \App\Models\Payment::S_PENDING ?? 'PENDING',
+        'raw'      => [],
+      ]
+    );
+
+    $payload = [
+      'transaction_details' => [
+        'order_id'     => $orderId,
+        'gross_amount' => (int)$data['amount'],
+      ],
+      'customer_details' => [
+        'first_name' => $data['name']  ?? null,
+        'email'      => $data['email'] ?? null,
+        'phone'      => $data['phone'] ?? null,
+      ],
+      // Opsional: batasi metode yang tampil.
+      // Kalau dikosongkan, Snap akan otomatis tampilkan yang aktif.
+      // 'enabled_payments' => ['gopay','shopeepay','bni_va','bri_va','permata_va','echannel'],
+
+      // Callback (opsional): halaman “finish” kamu
+      'callbacks' => [
+        'finish' => url('/payments/finish?order_id='.$orderId),
+      ],
+      // Expiry (opsional)
+      'expiry' => [
+        'unit'     => 'minutes',
+        'duration' => 30,
+      ],
+    ];
+
+    $snap = \Midtrans\Snap::createTransaction($payload);
+    // $snap adalah array: ['token' => '...','redirect_url' => '...']
+
+    // simpan raw minimal
+    \App\Models\Payment::where('order_id', $orderId)->update(['raw' => $snap]);
+
+    return response()->json([
+      'order_id'     => $orderId,
+      'snap_token'   => $snap['token'] ?? null,
+      'redirect_url' => $snap['redirect_url'] ?? null,
+    ], 201);
+  }
 }
