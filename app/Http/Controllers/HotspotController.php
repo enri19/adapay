@@ -50,6 +50,41 @@ class HotspotController extends Controller
     ]);
   }
 
+  public function dana(Request $request)
+  {
+    // … di dalam index()
+    $host = strtolower($request->getHost());
+    $isBaseHost = ($host === 'pay.adanih.info');
+
+    $clientId = \App\Support\ClientResolver::resolve($request);
+
+    $clients = collect();
+    if ($isBaseHost) {
+      $clients = DB::table('clients')->where('is_active',1)
+                  ->orderBy('name')->get(['client_id','name','slug']);
+
+      $q = trim((string) $request->query('client',''));
+      if ($q !== '') {
+        $match = $clients->first(fn($c)=> strcasecmp($c->client_id,$q)===0 || strcasecmp((string)$c->slug,$q)===0);
+        if ($match) $clientId = $match->client_id;
+      }
+    }
+
+    // kalau base host & belum ada pilihan → biarkan null
+    $selectedClientId = ($isBaseHost && ($clientId === 'DEFAULT' || empty($clientId))) ? null : $clientId;
+
+    // voucher hanya di-load jika sudah ada client terpilih
+    $vouchers = $selectedClientId ? \App\Models\HotspotVoucher::listForPortal($selectedClientId) : collect();
+
+    return view('hotspot.dana', [
+      'vouchers'         => $vouchers,
+      'resolvedClientId' => $selectedClientId, // bisa null
+      'isBaseHost'       => $isBaseHost,
+      'clients'          => $clients,
+      'layoutHeader'     => 'minimal', // 'full' | 'minimal' | 'none'
+    ]);
+  }
+
   public function apiVouchers(Request $request)
   {
     $q = trim((string) $request->query('client', ''));
@@ -99,7 +134,7 @@ class HotspotController extends Controller
       'name'       => 'nullable|string|max:100',
       'email'      => 'nullable|email',
       'phone'      => 'nullable|string|max:30',
-      'method'     => 'nullable|string|in:qris,gopay,shopeepay',
+      'method'     => 'nullable|string|in:qris,gopay,shopeepay,dana',
       'client_id'  => 'nullable|string|max:32',
     ]);
 
@@ -107,100 +142,116 @@ class HotspotController extends Controller
     $host       = strtolower($request->getHost());
     $isBaseHost = ($host === 'pay.adanih.info');
 
-    // 1) Utamakan client_id dari payload (boleh client_id atau slug)
+    // Resolve client from payload or fallback to resolver
     $clientFromPayload = strtoupper(preg_replace('/[^A-Z0-9]/', '', (string)($data['client_id'] ?? '')));
     $clientId = null;
     if ($clientFromPayload !== '') {
-        $row = DB::table('clients')
-            ->where('is_active', 1)
-            ->where(function($w) use ($clientFromPayload){
-                $w->where('client_id', $clientFromPayload)
-                  ->orWhere('slug', $clientFromPayload);
-            })
-            ->select('client_id')
-            ->first();
-        if ($row) {
-            $clientId = $row->client_id; // valid dari payload
-        }
+      $row = DB::table('clients')
+        ->where('is_active', 1)
+        ->where(function($w) use ($clientFromPayload) {
+          $w->where('client_id', $clientFromPayload)
+            ->orWhere('slug', $clientFromPayload);
+        })
+        ->select('client_id')
+        ->first();
+      if ($row) {
+        $clientId = $row->client_id; // valid dari payload
+      }
     }
 
-    // 2) Fallback ke resolver (subdomain / ?client)
     if (!$clientId) {
-        $clientId = \App\Support\ClientResolver::resolve($request);
+      $clientId = \App\Support\ClientResolver::resolve($request);
     }
 
     // --- Validasi voucher milik client ---
     $voucher = \App\Models\HotspotVoucher::query()
-        ->where('id', (int)$data['voucher_id'])
-        ->forClient($clientId)
-        ->where('is_active', true)
-        ->first();
+      ->where('id', (int)$data['voucher_id'])
+      ->forClient($clientId)
+      ->where('is_active', true)
+      ->first();
 
     if (!$voucher) {
-        return response()->json([
-          'error' => 'INVALID_VOUCHER',
-          'message' => 'Voucher tidak tersedia untuk lokasi ini.'
-        ], 422);
+      return response()->json([
+        'error' => 'INVALID_VOUCHER',
+        'message' => 'Voucher tidak tersedia untuk lokasi ini.'
+      ], 422);
     }
 
     $orderId = OrderId::make($clientId);
 
-    // (sisanya TETAP seperti punyamu)
     $voucher = \App\Models\HotspotVoucher::findOrFail($data['voucher_id']);
+    
+    // Tentukan provider pembayaran berdasarkan method
+    $method = $data['method'] ?? 'qris';  // Default 'qris' jika tidak ada method
     $adapter = \App\Payments\Payment::provider();
+
+    // Logic provider berdasarkan method pembayaran yang dipilih
+    $provider = 'midtrans';  // Default provider
+    $resp = [];
+
     try {
-        if (($data['method'] ?? 'qris') === 'qris') {
-            $resp = $adapter->createQris($orderId, (int)$voucher->price, [
-              'name'  => $data['name'] ?? null,
-              'email' => $data['email'] ?? null,
-              'phone' => $data['phone'] ?? null,
-            ], ['expiry_minutes' => 30]);
-        } else {
-            $resp = $adapter->createEwallet($data['method'], $orderId, (int)$voucher->price, [
-              'name'  => $data['name'] ?? null,
-              'email' => $data['email'] ?? null,
-              'phone' => $data['phone'] ?? null,
-            ], ['callback_url' => url('/payments/return')]);
-        }
+      if ($method === 'qris') {
+        $resp = $adapter->createQris($orderId, (int)$voucher->price, [
+          'name'  => $data['name'] ?? null,
+          'email' => $data['email'] ?? null,
+          'phone' => $data['phone'] ?? null,
+        ], ['expiry_minutes' => 30]);
+      } elseif ($method === 'dana') {
+        $provider = 'dana';  // Jika menggunakan DANA
+        $resp = $adapter->createEwallet('dana', $orderId, (int)$voucher->price, [
+          'name'  => $data['name'] ?? null,
+          'email' => $data['email'] ?? null,
+          'phone' => $data['phone'] ?? null,
+        ], ['callback_url' => url('/payments/return')]);
+      } else {
+        $resp = $adapter->createEwallet($method, $orderId, (int)$voucher->price, [
+          'name'  => $data['name'] ?? null,
+          'email' => $data['email'] ?? null,
+          'phone' => $data['phone'] ?? null,
+        ], ['callback_url' => url('/payments/return')]);
+      }
 
-        \App\Models\HotspotOrder::updateOrCreate(
-          ['order_id' => $orderId],
-          [
-            'client_id'           => $clientId,
-            'hotspot_voucher_id'  => $voucher->id,
-            'buyer_name'          => $data['name'] ?? null,
-            'buyer_email'         => $data['email'] ?? null,
-            'buyer_phone'         => $data['phone'] ?? null,
-          ]
-        );
+      // Simpan Hotspot Order
+      \App\Models\HotspotOrder::updateOrCreate(
+        ['order_id' => $orderId],
+        [
+          'client_id'           => $clientId,
+          'hotspot_voucher_id'  => $voucher->id,
+          'buyer_name'          => $data['name'] ?? null,
+          'buyer_email'         => $data['email'] ?? null,
+          'buyer_phone'         => $data['phone'] ?? null,
+        ]
+      );
 
-        \App\Models\Payment::updateOrCreate(
-          ['order_id' => $orderId],
-          [
-            'client_id'    => $clientId,
-            'provider'     => 'midtrans',
-            'provider_ref' => $resp['provider_ref'] ?? null,
-            'amount'       => (int)$voucher->price,
-            'currency'     => 'IDR',
-            'status'       => $resp['status'] ?? 'PENDING',
-            'qr_string'    => $resp['qr_string'] ?? null,
-            'raw'          => $resp,
-            'actions'      => $resp['actions'] ?? null,
-          ]
-        );
+      // Simpan Payment
+      \App\Models\Payment::updateOrCreate(
+        ['order_id' => $orderId],
+        [
+          'client_id'    => $clientId,
+          'provider'     => $provider,  // Dynamically set the provider here
+          'provider_ref' => $resp['provider_ref'] ?? null,
+          'amount'       => (int)$voucher->price,
+          'currency'     => 'IDR',
+          'status'       => $resp['status'] ?? 'PENDING',
+          'qr_string'    => $resp['qr_string'] ?? null,
+          'raw'          => $resp,
+          'actions'      => $resp['actions'] ?? null,
+        ]
+      );
 
-        $this->waSendInvoice($data, $orderId, $voucher, $resp);
+      // Kirim invoice via WhatsApp
+      $this->waSendInvoice($data, $orderId, $voucher, $resp);
 
-        return response()->json(['order_id' => $orderId, 'midtrans' => $resp], 201);
+      return response()->json(['order_id' => $orderId, 'payment' => $resp], 201);
 
     } catch (\Throwable $e) {
-        $msg = $e->getMessage();
-        $code = 'CHECKOUT_FAILED'; $http = 502;
-        if (strpos($msg, 'CHANNEL_INACTIVE') !== false || strpos($msg, '"status_code":"402"') !== false) { $code='CHANNEL_INACTIVE'; }
-        if (stripos($msg, 'pop id') !== false) { $code='POP_REQUIRED'; }
-        if (stripos($msg, 'UPSTREAM_TEMPORARY') !== false || strpos($msg, '"status_code":"500"') !== false) { $code='UPSTREAM_TEMPORARY'; $http=503; }
-        \Log::error('hotspot.checkout failed', ['order_id' => $orderId, 'err' => $msg]);
-        return response()->json(['error' => $code, 'message' => $msg], $http);
+      $msg = $e->getMessage();
+      $code = 'CHECKOUT_FAILED'; $http = 502;
+      if (strpos($msg, 'CHANNEL_INACTIVE') !== false || strpos($msg, '"status_code":"402"') !== false) { $code='CHANNEL_INACTIVE'; }
+      if (stripos($msg, 'pop id') !== false) { $code='POP_REQUIRED'; }
+      if (stripos($msg, 'UPSTREAM_TEMPORARY') !== false || strpos($msg, '"status_code":"500"') !== false) { $code='UPSTREAM_TEMPORARY'; $http=503; }
+      \Log::error('hotspot.checkout failed', ['order_id' => $orderId, 'err' => $msg]);
+      return response()->json(['error' => $code, 'message' => $msg], $http);
     }
   }
 

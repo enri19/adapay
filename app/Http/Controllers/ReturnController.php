@@ -4,55 +4,53 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Payment;
+use App\Models\HotspotOrder;
+use App\Models\Client;
+use App\Models\HotspotUser;
+use App\Jobs\ProvisionHotspotIfPaid;
+use App\Jobs\PaymentBecamePaid;
+use App\Jobs\SyncMidtransStatus;
 use App\Services\HotspotProvisioner;
-use App\Services\WhatsAppGateway;
-use Illuminate\Support\Facades\Log;
 
 class ReturnController extends Controller
 {
-  private function initMidtrans(): void {
-    \Midtrans\Config::$serverKey    = config('midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY', '');
-    \Midtrans\Config::$isProduction = (bool) (config('midtrans.is_production') ?? env('MIDTRANS_IS_PRODUCTION', false));
-    if (property_exists(\Midtrans\Config::class, 'isSanitized')) \Midtrans\Config::$isSanitized = true;
-  }
-
-  private function getAuthModeForOrder(string $orderId): ?string
-  {
-    $order = \App\Models\HotspotOrder::where('order_id', $orderId)->first();
-    if (!$order) return null;
-
-    $client = \App\Models\Client::where('client_id', $order->client_id)->first();
-    return $client ? $client->auth_mode : null; // 'code' atau 'userpass' (atau null)
-  }
-
   public function show(Request $r, HotspotProvisioner $prov)
   {
     $orderId = $r->query('order_id');
     if (!$orderId) {
-      return view('payments.return', ['orderId'=>null,'status'=>'MISSING','creds'=>null]);
+      return view('payments.return', [
+        'orderId'       => null,
+        'status'        => 'MISSING',
+        'creds'         => null,
+        'authMode'      => null,
+        'hotspotPortal' => null,
+      ]);
     }
 
-    $p = \App\Models\Payment::where('order_id', $orderId)->first();
-    if (!$p) {
-      \App\Jobs\ProvisionHotspotIfPaid::dispatch($orderId)->onQueue('router');
-      \App\Jobs\PaymentBecamePaid::dispatch($orderId)->onQueue('wa');
+    $payment = Payment::where('order_id', $orderId)->first();
+
+    // Jika payment belum ada, coba trigger job untuk cek / provision
+    if (!$payment) {
+      ProvisionHotspotIfPaid::dispatch($orderId)->onQueue('router');
+      PaymentBecamePaid::dispatch($orderId)->onQueue('wa');
     }
 
-    // --- DB-only, cepat ---
-    $status = $p->status;
-    $u = \App\Models\HotspotUser::where('order_id', $orderId)->first();
-    $creds = $u ? ['u'=>$u->username, 'p'=>$u->password] : null;
+    $status = $payment ? $payment->status : Payment::S_PENDING;
+    $user   = HotspotUser::where('order_id', $orderId)->first();
+    $creds  = $user ? ['u' => $user->username, 'p' => $user->password] : null;
 
-    // kalau belum PAID, sinkron ulang status di background
+    // Kalau belum paid, sinkronkan status provider di background
     try {
-      if ($status !== \App\Models\Payment::S_PAID) {
-        \App\Jobs\SyncMidtransStatus::dispatch($orderId)->afterResponse();
+      if ($status !== Payment::S_PAID) {
+        SyncMidtransStatus::dispatch($orderId)->afterResponse();
+        // TODO: tambahkan SyncDanaStatus job kalau mau polling status DANA juga
       }
-    } catch (\Throwable $e) { /* ignore */ }
+    } catch (\Throwable $e) {
+      // abaikan error agar return tetap lancar
+    }
 
-    // --- render cepat; smart loader akan poll JSON & auto refresh bila perlu ---
-    $order   = \App\Models\HotspotOrder::where('order_id',$orderId)->first();
-    $client  = $order ? \App\Models\Client::where('client_id',$order->client_id)->first() : null;
+    $order  = HotspotOrder::where('order_id', $orderId)->first();
+    $client = $order ? Client::where('client_id', $order->client_id)->first() : null;
 
     return view('payments.return', [
       'orderId'       => $orderId,

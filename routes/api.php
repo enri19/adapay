@@ -16,7 +16,10 @@ Route::get('/payments/{orderId}/ewallet/qr', [PaymentController::class, 'ewallet
 Route::get('/payments/{orderId}/qris.png', [PaymentController::class, 'qrisPng']);
 
 // Webhook (public)
-Route::post('/webhooks/midtrans', [WebhookController::class, 'handle']);
+// Midtrans webhook
+Route::post('/webhooks/midtrans', [WebhookController::class, 'handleMidtransWebhook']);
+// DANA webhook
+Route::post('/webhooks/dana', [WebhookController::class, 'handleDanaWebhook']);  // DANA Webhook route
 
 Route::post('/hotspot/checkout', [HotspotController::class, 'checkout']);
 Route::get('/hotspot/credentials/{orderId}', [HotspotController::class, 'credentials']);
