@@ -167,7 +167,6 @@
                 <input class="pm-radio" type="radio" name="method" value="dana" checked>
                 <img class="pm-logo" src="{{ asset('images/pay/dana.svg') }}" alt="DANA"
                      onerror="this.replaceWith(document.createTextNode('DANA'))">
-            <div class="pay-methods" role="radiogroup" aria-label="E-Wallet">
               <label class="pm-card" data-value="gopay" tabindex="0" role="radio" aria-checked="false">
                 <input class="pm-radio" type="radio" name="method" value="gopay">
                 <img class="pm-logo" src="{{ asset('images/pay/gopay.svg') }}" alt="GoPay"
