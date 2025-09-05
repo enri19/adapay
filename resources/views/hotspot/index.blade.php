@@ -142,7 +142,7 @@
         <div class="subcard-hd">Metode Pembayaran</div>
         <div class="subcard-bd">
           {{-- QRIS (disarankan) --}}
-          <div class="pay-section">
+          {{-- <div class="pay-section">
             <div class="pay-header">
               <div class="pay-title">QRIS <span class="text-xs font-normal text-emerald-700 px-2 py-0.5 border rounded-full">Disarankan</span></div>
               <div class="pay-desc">Pembayaran DANA & e-wallet lain via scan QR dari m-banking/e-wallet.</div>
@@ -154,7 +154,7 @@
                      onerror="this.replaceWith(document.createTextNode('QRIS'))">
               </label>
             </div>
-          </div>
+          </div> --}}
 
           {{-- E-Wallet langsung --}}
           <div class="pay-section">
