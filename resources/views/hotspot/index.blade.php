@@ -163,8 +163,8 @@
               <div class="pay-desc">Bayar langsung di aplikasi (tanpa scan QR).</div>
             </div>
             <div class="pay-methods" role="radiogroup" aria-label="E-Wallet">
-              <label class="pm-card" data-value="gopay" tabindex="0" role="radio" aria-checked="false">
-                <input class="pm-radio" type="radio" name="method" value="gopay">
+              <label class="pm-card" data-value="gopay" tabindex="0" role="radio" aria-checked="true">
+                <input class="pm-radio" type="radio" name="method" value="gopay" checked>
                 <img class="pm-logo" src="{{ asset('images/pay/gopay.svg') }}" alt="GoPay"
                      onerror="this.replaceWith(document.createTextNode('GoPay'))">
               {{-- </label>
