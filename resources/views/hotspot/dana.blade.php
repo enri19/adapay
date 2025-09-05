@@ -167,12 +167,13 @@
                 <input class="pm-radio" type="radio" name="method" value="dana" checked>
                 <img class="pm-logo" src="{{ asset('images/pay/dana.svg') }}" alt="DANA"
                      onerror="this.replaceWith(document.createTextNode('DANA'))">
+              </label>
               <label class="pm-card" data-value="gopay" tabindex="0" role="radio" aria-checked="false">
                 <input class="pm-radio" type="radio" name="method" value="gopay">
                 <img class="pm-logo" src="{{ asset('images/pay/gopay.svg') }}" alt="GoPay"
                      onerror="this.replaceWith(document.createTextNode('GoPay'))">
-              {{-- </label>
-              <label class="pm-card" data-value="shopeepay" tabindex="0" role="radio" aria-checked="false">
+              </label>
+              {{-- <label class="pm-card" data-value="shopeepay" tabindex="0" role="radio" aria-checked="false">
                 <input class="pm-radio" type="radio" name="method" value="shopeepay">
                 <img class="pm-logo" src="{{ asset('images/pay/shopeepay.svg') }}" alt="ShopeePay"
                      onerror="this.replaceWith(document.createTextNode('ShopeePay'))">
