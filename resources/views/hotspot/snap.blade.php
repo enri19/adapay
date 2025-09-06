@@ -58,10 +58,6 @@
       </div>
     </div>
 
-    @php
-      $isBaseHost = strtolower(request()->getHost()) === 'pay.adanih.info';
-    @endphp
-
     <form id="formCheckout" class="space-y-3" novalidate>
       {{-- Tampil hanya jika di base host --}}
       @if ($isBaseHost)
@@ -77,25 +73,29 @@
               autocomplete="off"
               required
             >
-              <option value="" disabled @selected($currentClientId === '')>— Pilih Mitra —</option>
+              {{-- Placeholder TIDAK disabled supaya bisa benar2 terpilih --}}
+              <option value="" @selected($selectedClientId === '')>— Pilih Mitra —</option>
 
               @forelse ($clients as $c)
-                <option value="{{ $c->client_id }}"
+                <option
+                  value="{{ $c->client_id }}"
                   data-slug="{{ $c->slug }}"
+                  @selected((string)$selectedClientId === (string)$c->client_id)
                 >
                   {{ $c->name }} ({{ $c->client_id }})
                 </option>
               @empty
-                <option value="" disabled selected>Tidak ada mitra aktif</option>
+                <option value="">Tidak ada mitra aktif</option>
               @endforelse
             </select>
+
             <small class="text-xs text-gray-500">Pilih mitra terlebih dahulu sebelum lanjut, dawg.</small>
           </div>
         </div>
       @endif
 
       {{-- Nilai client_id disimpan di sini sebagai satu-satunya sumber kebenaran --}}
-      <input type="hidden" id="client_id" name="client_id" value="{{ $resolvedClientId ?? '' }}">
+      <input type="hidden" id="client_id" name="client_id" value="{{ $selectedClientId ?? '' }}">
 
       {{-- Pilihan Voucher --}}
       <div class="subcard">
