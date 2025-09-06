@@ -59,13 +59,15 @@
     </div>
 
     @php
-      $isBaseHost = str_contains(request()->getHost(), config('app.base_host', 'pay.adanih.info'));
+      $host = strtolower(request()->getHost());
+      $baseHost = strtolower(config('app.base_host', 'pay.adanih.info'));
+      $isBaseHost = ($host === $baseHost);
     @endphp
+
 
     <form id="formCheckout" class="space-y-3" novalidate>
       {{-- Tampil hanya jika di base host --}}
       @php
-        // Normalisasi supaya perbandingan stabil (hindari auto-select salah)
         $currentClientId = old('client', (string)($resolvedClientId ?? ''));
       @endphp
 
@@ -82,7 +84,6 @@
               autocomplete="off"
               required
             >
-              {{-- Placeholder: tetap terpilih saat belum ada pilihan --}}
               <option value="" disabled @selected($currentClientId === '')>— Pilih Mitra —</option>
 
               @forelse ($clients as $c)
@@ -93,7 +94,6 @@
                 >
                   {{ $c->name }} ({{ $c->client_id }})
                 </option>
-
               @empty
                 <option value="" disabled selected>Tidak ada mitra aktif</option>
               @endforelse
@@ -214,7 +214,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // ===== Helper Functions =====
   const rupiah = (n) => 'Rp' + Math.max(0, parseInt(n || 0, 10)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  const sanitizeClientId = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+  const normalizeClientId = (s) => String(s ?? '').trim();
 
   const setLoading = (btn, isLoading, text) => {
     if (!btn) return;
@@ -330,16 +330,13 @@ document.addEventListener('DOMContentLoaded', function() {
   };
   
   const handleClientChange = () => {
-    const newClientId = sanitizeClientId(clientSelectEl.value);
+    const newClientId = normalizeClientId(clientSelectEl.value); // tanpa potong/ubah case
     clientIdHiddenEl.value = newClientId;
-    
-    // Update URL query parameter without reloading
+
+    // Update URL tanpa reload
     const url = new URL(window.location);
-    if (newClientId) {
-      url.searchParams.set('client', newClientId);
-    } else {
-      url.searchParams.delete('client');
-    }
+    if (newClientId) url.searchParams.set('client', newClientId);
+    else url.searchParams.delete('client');
     history.replaceState(null, '', url.toString());
 
     noVoucherBox.textContent = newClientId ? 'Memuat voucher...' : 'Pilih mitra untuk menampilkan voucher.';
@@ -403,14 +400,16 @@ document.addEventListener('DOMContentLoaded', function() {
   const init = () => {
     if (clientSelectEl) {
       clientSelectEl.addEventListener('change', handleClientChange);
+    } else if (clientIdHiddenEl?.value) {
+      // subdomain flow: SSR sudah kasih client_id → muat voucher
+      fetchVouchers(normalizeClientId(clientIdHiddenEl.value));
     }
-    
+
     voucherSelectEl.addEventListener('change', updateSummary);
     nameInput.addEventListener('blur', () => showFieldError(nameInput, validateName()));
     phoneInput.addEventListener('blur', () => showFieldError(phoneInput, validatePhone().msg));
     formEl.addEventListener('submit', startCheckout);
-    
-    // Update summary saat halaman pertama kali dimuat
+
     updateSummary();
   };
 
