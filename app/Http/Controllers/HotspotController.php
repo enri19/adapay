@@ -624,13 +624,22 @@ class HotspotController extends Controller
   private function labelPaymentStatus(string $status): string
   {
     $s = strtoupper($status);
-    return match ($s) {
-      'SETTLEMENT', 'CAPTURE' => 'LUNAS',
-      'PENDING', 'INIT'      => 'Menunggu Pembayaran',
-      'EXPIRE', 'EXPIRED'    => 'Kedaluwarsa',
-      'CANCEL', 'DENY'       => 'Dibatalkan',
-      default                => ucwords(strtolower($s)),
-    };
+    switch ($s) {
+      case 'SETTLEMENT':
+      case 'CAPTURE':
+        return 'LUNAS';
+      case 'PENDING':
+      case 'INIT':
+        return 'Menunggu Pembayaran';
+      case 'EXPIRE':
+      case 'EXPIRED':
+        return 'Kedaluwarsa';
+      case 'CANCEL':
+      case 'DENY':
+        return 'Dibatalkan';
+      default:
+        return ucwords(strtolower($s));
+    }
   }
 
   private function fmtWib(?string $ts): ?string
