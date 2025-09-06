@@ -218,88 +218,88 @@ class PaymentController extends Controller
       ->header('Cache-Control', 'no-store, max-age=0');
   }
 
-  public function createSnap(Request $r)
-  {
-      // Inisialisasi Midtrans
-      \Midtrans\Config::$serverKey    = config('midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY', '');
-      \Midtrans\Config::$isProduction = (bool) (config('midtrans.is_production') ?? env('MIDTRANS_IS_PRODUCTION', false));
-      if (property_exists(\Midtrans\Config::class, 'isSanitized')) \Midtrans\Config::$isSanitized = true;
+  // public function createSnap(Request $r)
+  // {
+  //     // Inisialisasi Midtrans
+  //     \Midtrans\Config::$serverKey    = config('midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY', '');
+  //     \Midtrans\Config::$isProduction = (bool) (config('midtrans.is_production') ?? env('MIDTRANS_IS_PRODUCTION', false));
+  //     if (property_exists(\Midtrans\Config::class, 'isSanitized')) \Midtrans\Config::$isSanitized = true;
 
-      $data = $r->validate([
-          'amount'     => 'required|integer|min:1000',
-          'name'       => 'nullable|string|max:100',
-          'email'      => 'nullable|email',
-          'phone'      => 'nullable|string|max:30',
-          'voucher_id' => 'required|integer',
-          'client_id'  => 'nullable|string|max:50',
-          // 'enabled_payments' => 'array', // opsional
-      ]);
+  //     $data = $r->validate([
+  //         'amount'     => 'required|integer|min:1000',
+  //         'name'       => 'nullable|string|max:100',
+  //         'email'      => 'nullable|email',
+  //         'phone'      => 'nullable|string|max:30',
+  //         'voucher_id' => 'required|integer',
+  //         'client_id'  => 'nullable|string|max:50',
+  //         // 'enabled_payments' => 'array', // opsional
+  //     ]);
 
-      $orderId = 'ORD-'.now()->format('Ymd-His').'-'.\Illuminate\Support\Str::upper(\Illuminate\Support\Str::random(6));
+  //     $orderId = 'ORD-'.now()->format('Ymd-His').'-'.\Illuminate\Support\Str::upper(\Illuminate\Support\Str::random(6));
 
-      // Simpan draft payment
-      \App\Models\Payment::updateOrCreate(
-          ['order_id' => $orderId],
-          [
-              'client_id' => $data['client_id'] ?? (\App\Support\OrderId::client($orderId) ?: 'DEFAULT'),
-              'provider'  => 'midtrans',
-              'amount'    => (int) $data['amount'],
-              'currency'  => 'IDR',
-              'status'    => \App\Models\Payment::S_PENDING ?? 'PENDING',
-              'raw'       => ['voucher_id' => $data['voucher_id']],
-          ]
-      );
+  //     // Simpan draft payment
+  //     \App\Models\Payment::updateOrCreate(
+  //         ['order_id' => $orderId],
+  //         [
+  //             'client_id' => $data['client_id'] ?? (\App\Support\OrderId::client($orderId) ?: 'DEFAULT'),
+  //             'provider'  => 'midtrans',
+  //             'amount'    => (int) $data['amount'],
+  //             'currency'  => 'IDR',
+  //             'status'    => \App\Models\Payment::S_PENDING ?? 'PENDING',
+  //             'raw'       => ['voucher_id' => $data['voucher_id']],
+  //         ]
+  //     );
 
-      $payload = [
-          'transaction_details' => [
-              'order_id'     => $orderId,
-              'gross_amount' => (int) $data['amount'],
-          ],
-          'customer_details' => [
-              'first_name' => $data['name']  ?? null,
-              'email'      => $data['email'] ?? null,
-              'phone'      => $data['phone'] ?? null,
-          ],
-          // Kalau mau membatasi channel, kirim dari FE lalu forward ke sini
-          // 'enabled_payments' => $r->input('enabled_payments', []),
+  //     $payload = [
+  //         'transaction_details' => [
+  //             'order_id'     => $orderId,
+  //             'gross_amount' => (int) $data['amount'],
+  //         ],
+  //         'customer_details' => [
+  //             'first_name' => $data['name']  ?? null,
+  //             'email'      => $data['email'] ?? null,
+  //             'phone'      => $data['phone'] ?? null,
+  //         ],
+  //         // Kalau mau membatasi channel, kirim dari FE lalu forward ke sini
+  //         // 'enabled_payments' => $r->input('enabled_payments', []),
 
-          'callbacks' => [
-              'finish' => url('/hotspot/order/'.$orderId),
-          ],
-          'expiry' => [
-              'unit'     => 'minutes',
-              'duration' => 30,
-          ],
-      ];
+  //         'callbacks' => [
+  //             'finish' => url('/hotspot/order/'.$orderId),
+  //         ],
+  //         'expiry' => [
+  //             'unit'     => 'minutes',
+  //             'duration' => 30,
+  //         ],
+  //     ];
 
-      try {
-          // Bisa balikan stdClass -> ubah ke array agar aman dipakai
-          $respObj = \Midtrans\Snap::createTransaction($payload);
-          $snap    = is_array($respObj) ? $respObj : json_decode(json_encode($respObj), true);
+  //     try {
+  //         // Bisa balikan stdClass -> ubah ke array agar aman dipakai
+  //         $respObj = \Midtrans\Snap::createTransaction($payload);
+  //         $snap    = is_array($respObj) ? $respObj : json_decode(json_encode($respObj), true);
 
-          // Fallback kalau SDK yang dipakai tidak balikan redirect_url/token
-          if (empty($snap['token'])) {
-              // sebagian versi SDK menyediakan helper ini
-              if (method_exists(\Midtrans\Snap::class, 'createTransactionToken')) {
-                  $snap['token'] = \Midtrans\Snap::createTransactionToken($payload);
-              } elseif (method_exists(\Midtrans\Snap::class, 'getSnapToken')) {
-                  $snap['token'] = \Midtrans\Snap::getSnapToken($payload);
-              }
-          }
+  //         // Fallback kalau SDK yang dipakai tidak balikan redirect_url/token
+  //         if (empty($snap['token'])) {
+  //             // sebagian versi SDK menyediakan helper ini
+  //             if (method_exists(\Midtrans\Snap::class, 'createTransactionToken')) {
+  //                 $snap['token'] = \Midtrans\Snap::createTransactionToken($payload);
+  //             } elseif (method_exists(\Midtrans\Snap::class, 'getSnapToken')) {
+  //                 $snap['token'] = \Midtrans\Snap::getSnapToken($payload);
+  //             }
+  //         }
 
-          \App\Models\Payment::where('order_id', $orderId)->update([
-              'raw' => array_replace(['voucher_id' => $data['voucher_id']], ['snap' => $snap]),
-          ]);
+  //         \App\Models\Payment::where('order_id', $orderId)->update([
+  //             'raw' => array_replace(['voucher_id' => $data['voucher_id']], ['snap' => $snap]),
+  //         ]);
 
-          return response()->json([
-              'order_id'     => $orderId,
-              'snap_token'   => $snap['token'] ?? null,
-              'redirect_url' => $snap['redirect_url'] ?? null,
-          ], 201);
+  //         return response()->json([
+  //             'order_id'     => $orderId,
+  //             'snap_token'   => $snap['token'] ?? null,
+  //             'redirect_url' => $snap['redirect_url'] ?? null,
+  //         ], 201);
 
-      } catch (\Throwable $e) {
-          \Log::error('snap.create.failed', ['order_id' => $orderId, 'err' => $e->getMessage()]);
-          return response()->json(['error'=>'PAYMENT_CREATE_FAILED','message'=>$e->getMessage()], 502);
-      }
-  }
+  //     } catch (\Throwable $e) {
+  //         \Log::error('snap.create.failed', ['order_id' => $orderId, 'err' => $e->getMessage()]);
+  //         return response()->json(['error'=>'PAYMENT_CREATE_FAILED','message'=>$e->getMessage()], 502);
+  //     }
+  // }
 }

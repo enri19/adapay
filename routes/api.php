@@ -11,7 +11,6 @@ Route::get('/payments/{orderId}', [PaymentController::class, 'show']);
 // Route::post('/payments/{orderId}/refresh', [PaymentController::class, 'refreshStatus']);
 Route::post('/payments/gopay', [PaymentController::class, 'createGopay']);
 Route::post('/payments/ewallet', [EmoneyController::class, 'charge']);
-Route::post('/payments/snap', [PaymentController::class, 'createSnap']);
 Route::get('/payments/{orderId}/ewallet/qr', [PaymentController::class, 'ewalletQr']);
 Route::get('/payments/{orderId}/qris.png', [PaymentController::class, 'qrisPng']);
 
@@ -22,5 +21,6 @@ Route::post('/webhooks/midtrans', [WebhookController::class, 'handleMidtransWebh
 Route::post('/webhooks/dana', [WebhookController::class, 'handleDanaWebhook']);  // DANA Webhook route
 
 Route::post('/hotspot/checkout', [HotspotController::class, 'checkout']);
+Route::post('/hotspot/checkout-snap', [HotspotController::class, 'checkoutSnap']);
 Route::get('/hotspot/credentials/{orderId}', [HotspotController::class, 'credentials']);
 Route::get('/hotspot/vouchers', [HotspotController::class, 'vouchers'])->name('api.hotspot.vouchers');

@@ -2,55 +2,49 @@
 @section('title', 'Beli Voucher Hotspot')
 
 @push('head')
+{{-- Midtrans Snap JS --}}
+@php $isProd = config('midtrans.is_production', false); @endphp
+<script src="{{ $isProd ? 'https://app.midtrans.com/snap/snap.js' : 'https://app.sandbox.midtrans.com/snap/snap.js' }}"
+        data-client-key="{{ config('midtrans.client_key') }}"></script>
+
 <style>
-  /* ====== Box/Panel ====== */
-  .panel{border:1px solid #e5e7eb;border-radius:1rem;background:#fff;padding:1rem}
-  .panel--accent{background:linear-gradient(180deg,#f8fbff, #fff)}
-  .panel-hd{display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem}
-  .panel-ic{width:20px;height:20px;color:#0284c7}
-  .subcard{border:1px solid #eef2f7;border-radius:.75rem;background:#fff}
-  .subcard-hd{padding:.75rem .9rem;border-bottom:1px solid #eef2f7;font-weight:600}
-  .subcard-bd{padding:.9rem}
-
-  /* ====== Existing payment styles (ditambah dikit) ====== */
-  .pay-section{margin-top:.5rem}
-  .pay-header{display:flex;align-items:baseline;gap:.5rem;margin-bottom:.4rem}
-  .pay-title{font-weight:700}
-  .pay-desc{font-size:.85rem;color:#6b7280}
-  .pay-methods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem}
-  .pm-card{
-    display:flex;align-items:center;justify-content:center;gap:.5rem;
-    border:1px solid #e5e7eb;border-radius:.6rem;background:#fff;padding:.6rem .75rem;
-    cursor:pointer; user-select:none;
-    transition:border-color .15s ease, box-shadow .15s ease, transform .06s ease, background-color .15s ease;
+  :root {
+    --border-color-soft: #e5e7eb;
+    --border-color-lighter: #eef2f7;
+    --border-color-accent: #dbeafe;
+    --bg-accent-soft: #f0f7ff;
+    --brand-color: #2563eb;
+    --brand-color-light: rgba(37,99,235,.12);
+    --text-color-muted: #6b7280;
   }
-  .pm-card:hover{ background:#fafafa }
-  .pm-card:active{ transform:translateY(1px) }
-  .pm-card[aria-checked="true"]{
-    border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.12);
+  .panel { border: 1px solid var(--border-color-soft); border-radius: 1rem; background: #fff; padding: 1rem; }
+  .panel--accent { background: linear-gradient(180deg, #f8fbff, #fff); }
+  .panel-hd { display: flex; align-items: center; gap: .6rem; margin-bottom: .75rem; }
+  .panel-ic { width: 20px; height: 20px; color: #0284c7; }
+  .subcard { border: 1px solid var(--border-color-lighter); border-radius: .75rem; background: #fff; }
+  .subcard-hd { padding: .75rem .9rem; border-bottom: 1px solid var(--border-color-lighter); font-weight: 600; }
+  .subcard-bd { padding: .9rem; }
+  .pay-section { margin-top: .5rem; }
+  .pay-header { display: flex; align-items: baseline; gap: .5rem; margin-bottom: .4rem; }
+  .pay-title { font-weight: 700; }
+  .pay-desc { font-size: .85rem; color: var(--text-color-muted); }
+  .pm-card {
+    display: flex; align-items: center; justify-content: center; gap: .5rem;
+    border: 1px solid var(--border-color-soft); border-radius: .6rem; background: #fff; padding: .6rem .75rem;
+    cursor: pointer; user-select: none;
+    transition: all .15s ease;
   }
-  .pm-radio{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
-  .pm-logo{width:84px;height:28px;object-fit:contain}
+  .pm-card:hover { background: #fafafa; }
+  .pm-card:active { transform: translateY(1px); }
+  .pm-card[aria-checked="true"] { border-color: var(--brand-color); box-shadow: 0 0 0 3px var(--brand-color-light); }
+  .pm-radio { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
+  .summary { border: 1px solid var(--border-color-accent); background: var(--bg-accent-soft); border-radius: .75rem; padding: .75rem; }
+  .summary-row { display: flex; justify-content: space-between; gap: .75rem; font-size: .92rem; }
+  .summary-row + .summary-row { margin-top: .25rem; }
+  .summary-total { font-weight: 700; }
+  select:disabled { background: #f9fafb; color: var(--text-color-muted); cursor: not-allowed; }
   @media (max-width:768px){ .pay-methods{grid-template-columns:1fr 1fr} }
-
-  /* ====== Ringkasan ====== */
-  .summary{border:1px solid #dbeafe;background:#f0f7ff;border-radius:.75rem;padding:.75rem}
-  .summary-row{display:flex;justify-content:space-between;gap:.75rem;font-size:.92rem}
-  .summary-row + .summary-row{margin-top:.25rem}
-  .summary-total{font-weight:700}
-
-  select:disabled{ background:#f9fafb; color:#6b7280; }
 </style>
-
-{{-- Midtrans Snap JS (pakai LIVE URL, ganti ke sandbox kalau butuh) --}}
-@php $isProd = (bool) (config('midtrans.is_production') ?? env('MIDTRANS_IS_PRODUCTION', false)); @endphp
-@if($isProd)
-  <script src="https://app.midtrans.com/snap/snap.js"
-          data-client-key="{{ config('midtrans.client_key') ?? env('MIDTRANS_CLIENT_KEY') }}"></script>
-@else
-  <script src="https://app.sandbox.midtrans.com/snap/snap.js"
-          data-client-key="{{ config('midtrans.client_key_sandbox') ?? env('MIDTRANS_CLIENT_KEY') }}"></script>
-@endif
 @endpush
 
 @section('content')
@@ -65,22 +59,20 @@
     </div>
 
     @php
-      $isBaseHost = strtolower(request()->getHost()) === 'pay.adanih.info';
+      $isBaseHost = str_contains(request()->getHost(), config('app.base_host', 'pay.adanih.info'));
     @endphp
 
-    <form id="frm" class="space-y-3" onsubmit="return startCheckout(event)" novalidate data-base-host="{{ $isBaseHost ? '1' : '0' }}">
-      {{-- Picker Client (tampil hanya di base host) --}}
-      @if(!empty($isBaseHost) && $isBaseHost)
+    <form id="formCheckout" class="space-y-3" novalidate>
+      {{-- Tampil hanya jika di base host --}}
+      @if($isBaseHost)
       <div class="subcard">
         <div class="subcard-hd">Pilih Mitra</div>
         <div class="subcard-bd">
-          <label class="block text-sm font-medium mb-1">Mitra</label>
+          <label for="clientSelect" class="block text-sm font-medium mb-1">Mitra</label>
           <select id="clientSelect" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" autocomplete="off">
-            <option value="" disabled @if(empty($resolvedClientId)) selected @endif>— Pilih Client —</option>
+            <option value="" disabled @if(empty($resolvedClientId)) selected @endif>— Pilih Mitra —</option>
             @foreach($clients as $c)
-              <option value="{{ $c->client_id }}"
-                      data-slug="{{ $c->slug }}"
-                      @if(!empty($resolvedClientId) && $resolvedClientId === $c->client_id) selected @endif>
+              <option value="{{ $c->client_id }}" data-slug="{{ $c->slug }}" @selected($resolvedClientId === $c->client_id)>
                 {{ $c->name }} ({{ $c->client_id }})
               </option>
             @endforeach
@@ -89,19 +81,17 @@
       </div>
       @endif
 
-      {{-- Hidden client_id: satu saja, kosong jika belum pilih --}}
+      {{-- Nilai client_id disimpan di sini sebagai satu-satunya sumber kebenaran --}}
       <input type="hidden" id="client_id" name="client_id" value="{{ $resolvedClientId ?? '' }}">
 
-      {{-- Subcard: Voucher --}}
+      {{-- Pilihan Voucher --}}
       <div class="subcard">
         <div class="subcard-hd">Pilih Voucher</div>
         <div class="subcard-bd">
-          <label class="block text-sm font-medium mb-1">Voucher</label>
-
-          <select id="voucherSelect" name="voucher_id"
-                  class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
-                  @if(empty($resolvedClientId)) disabled @endif required>
-            @if(!empty($resolvedClientId))
+          <label for="voucherSelect" class="block text-sm font-medium mb-1">Voucher</label>
+          <select id="voucherSelect" name="voucher_id" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" @if(empty($resolvedClientId)) disabled @endif required>
+            {{-- Opsi voucher akan diisi oleh JavaScript --}}
+            @if(!empty($resolvedClientId) && $vouchers->isNotEmpty())
               @foreach($vouchers as $v)
                 <option value="{{ $v->id }}" data-name="{{ $v->name }}" data-price="{{ (int)$v->price }}">
                   {{ $v->name }} — Rp{{ number_format($v->price,0,',','.') }}
@@ -109,72 +99,51 @@
               @endforeach
             @endif
           </select>
-
-          <div id="noVoucherBox"
-              class="mt-2 p-3 text-sm text-gray-600 border rounded bg-gray-50 @if(!empty($resolvedClientId) && $vouchers->count()) hidden @endif">
-            @if(empty($resolvedClientId))
-              Pilih client untuk menampilkan voucher.
-            @else
-              Belum ada voucher untuk client ini.
-            @endif
+          <div id="noVoucherBox" class="mt-2 p-3 text-sm text-gray-600 border rounded bg-gray-50 @if(!empty($resolvedClientId) && $vouchers->isNotEmpty()) hidden @endif">
+            @if(empty($resolvedClientId)) Pilih mitra untuk menampilkan voucher. @else Belum ada voucher untuk mitra ini. @endif
           </div>
         </div>
       </div>
 
-      {{-- Subcard: Identitas --}}
+      {{-- Data Pembeli --}}
       <div class="subcard">
         <div class="subcard-hd">Data Pembeli</div>
         <div class="subcard-bd">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <input name="name" id="fldName" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
-                     placeholder="Nama lengkap" required minlength="2" pattern=".*\S.*">
+              <input name="name" id="fldName" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="Nama lengkap" required minlength="2" pattern=".*\S.*">
               <p id="errName" class="text-xs text-red-600 mt-1 hidden"></p>
             </div>
             <div>
-              <input name="phone" id="fldPhone" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
-                     placeholder="No WhatsApp" required minlength="2" pattern=".*\S.*">
+              <input name="phone" id="fldPhone" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" placeholder="No. WhatsApp (e.g., 0812...)" required minlength="9" pattern=".*\S.*">
               <p id="errPhone" class="text-xs text-red-600 mt-1 hidden"></p>
             </div>
-            <div>
-              <input name="email" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
-                     placeholder="Email (opsional)" type="email">
-            </div>
           </div>
-          <div class="mt-2 text-xs text-gray-500">
-            Transaksi diproses aman. Kredensial voucher tampil otomatis setelah pembayaran terkonfirmasi.
-          </div>
+           <input name="email" id="fldEmail" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200 mt-3" placeholder="Email (opsional)" type="email">
+          <p class="mt-2 text-xs text-gray-500">
+            Kredensial voucher akan tampil otomatis setelah pembayaran berhasil.
+          </p>
         </div>
       </div>
 
-      {{-- (UI metode tetap dibiarkan; Snap akan menampilkan channel yang aktif saja) --}}
-      <div class="subcard">
+      {{-- Metode Pembayaran (UI sederhana, Snap yang akan menampilkan pilihan) --}}
+      {{-- <div class="subcard">
         <div class="subcard-hd">Metode Pembayaran</div>
         <div class="subcard-bd">
-          <div class="pay-section">
-            <div class="pay-header">
-              <div class="pay-title">Metode via Snap</div>
-              <div class="pay-desc">Metode yang muncul menyesuaikan channel aktif di Midtrans.</div>
-            </div>
-            <div class="pay-methods" role="radiogroup" aria-label="Snap">
-              <label class="pm-card" data-value="snap" tabindex="0" role="radio" aria-checked="true">
+            <div class="pay-methods" role="radiogroup">
+              <label class="pm-card" role="radio" aria-checked="true">
                 <input class="pm-radio" type="radio" name="method" value="snap" checked>
-                <span class="text-sm font-medium">Snap Checkout</span>
+                <span class="text-sm font-medium">Semua Metode (Snap Checkout)</span>
               </label>
             </div>
-          </div>
         </div>
-      </div>
+      </div> --}}
 
       {{-- Ringkasan Pesanan --}}
       <div class="summary">
         <div class="summary-row">
           <span>Voucher</span>
           <span id="sumVoucherName">—</span>
-        </div>
-        <div class="summary-row">
-          <span>Metode</span>
-          <span id="sumMethod">Snap</span>
         </div>
         <hr class="my-2 border-blue-100">
         <div class="summary-row summary-total">
@@ -183,23 +152,16 @@
         </div>
       </div>
 
-      <div id="payErr" class="text-xs text-red-600 hidden"></div>
+      <p id="payErr" class="text-xs text-red-600 hidden"></p>
 
-      <button id="payBtn" type="submit" class="btn btn--primary"
-        @if(empty($resolvedClientId) || $vouchers->isEmpty()) disabled @endif>
-        <span class="btn__label">Bayar</span>
+      <button id="payBtn" type="submit" class="btn btn--primary" @if(empty($resolvedClientId) || $vouchers->isEmpty()) disabled @endif>
+        <span class="btn__label">Lanjut ke Pembayaran</span>
         <span class="spinner hidden" aria-hidden="true"></span>
       </button>
 
-      <div class="text-xs text-gray-500">
-        Dengan melanjutkan, kamu menyetujui
-        <a href="{{ url('/agreement') }}" class="underline text-sky-700">Perjanjian Layanan</a>
-        & <a href="{{ url('/privacy') }}" class="underline text-sky-700">Kebijakan Privasi</a>.
+      <div class="text-xs text-center text-gray-500">
+        Dengan melanjutkan, Anda menyetujui <a href="{{ url('/agreement') }}" class="underline text-sky-700">Perjanjian Layanan</a> kami.
       </div>
-
-      @if($vouchers->isEmpty())
-        <p class="text-xs text-gray-500">Tombol bayar non-aktif karena belum ada voucher.</p>
-      @endif
     </form>
   </div>
 </div>
@@ -207,331 +169,230 @@
 
 @push('scripts')
 <script>
-(function(){
-  // ===== Helpers =====
-  const $  = (s,sc)=> (sc||document).querySelector(s);
-  const $$ = (s,sc)=> Array.from((sc||document).querySelectorAll(s));
-  const isBaseHost = ()=> location.hostname.toLowerCase() === 'pay.adanih.info';
-  const sanitizeClientId = s => String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);
-  const rupiah = n => 'Rp' + Math.max(0,parseInt(n||0,10)).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+document.addEventListener('DOMContentLoaded', function() {
+  "use strict";
 
-  // Endpoint
+  // ===== Konfigurasi & URL API =====
   const API_VOUCHERS_URL = "{{ url('/api/hotspot/vouchers') }}";
-  const API_SNAP_URL     = "{{ url('/api/payments/snap') }}";
+  const API_SNAP_URL = "{{ url('/api/hotspot/checkout-snap') }}";
 
-  function setLoading(btn,on,txt){
-    if(!btn) return;
-    const label=btn.querySelector('.btn__label'), spin=btn.querySelector('.spinner');
-    btn.toggleAttribute('disabled', !!on);
-    btn.setAttribute('aria-busy', on?'true':'false');
-    if(spin) spin.classList.toggle('hidden', !on);
-    if(label){ if(btn.__orig==null) btn.__orig=label.textContent; label.textContent=(on&&txt)?txt:btn.__orig; }
-  }
+  // ===== Elemen DOM =====
+  const formEl = document.getElementById('formCheckout');
+  const clientSelectEl = document.getElementById('clientSelect');
+  const clientIdHiddenEl = document.getElementById('client_id');
+  const voucherSelectEl = document.getElementById('voucherSelect');
+  const noVoucherBox = document.getElementById('noVoucherBox');
+  const payBtn = document.getElementById('payBtn');
+  const payErrBox = document.getElementById('payErr');
+  const nameInput = document.getElementById('fldName');
+  const phoneInput = document.getElementById('fldPhone');
+  const emailInput = document.getElementById('fldEmail');
+  const sumVoucherName = document.getElementById('sumVoucherName');
+  const sumTotal = document.getElementById('sumTotal');
 
-  // ===== Elements =====
-  const formEl   = $('#frm');
-  const selClient= $('#clientSelect');
-  const hidClient= $('#client_id');
-  const payBtn   = $('#payBtn');
-  const errBox   = $('#payErr');
-  const noVoucher= $('#noVoucherBox');
-  const nameInput= $('#fldName');
-  const phoneInput=$('#fldPhone');
-  const emailInput=formEl ? formEl.querySelector('[name="email"]') : null;
+  // ===== Helper Functions =====
+  const rupiah = (n) => 'Rp' + Math.max(0, parseInt(n || 0, 10)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const sanitizeClientId = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
 
-  const sumName  = $('#sumVoucherName');
-  const sumTotal = $('#sumTotal');
-  const sumMethod= $('#sumMethod');
-
-  function getVoucherSel(){ return document.getElementById('voucherSelect'); }
-
-  // Client resolver
-  function getResolvedClientId(){
-    if (!isBaseHost()){
-      const parts = location.hostname.split('.');
-      return (parts.length > 3 && parts[0]) ? sanitizeClientId(parts[0]) : '';
-    }
-    const q = new URLSearchParams(location.search).get('client') || '';
-    return sanitizeClientId(q);
-  }
-
-  // Validasi sederhana
-  function errElFor(input){ const id=(input?.id||'').replace(/^fld/,'err'); return document.getElementById(id); }
-  function showFieldError(input,msg){
-    const err=errElFor(input); if(!err||!input) return;
-    if(msg){ err.textContent=msg; err.classList.remove('hidden'); input.classList.add('border-red-500','focus:ring-red-200'); input.setAttribute('aria-invalid','true'); }
-    else   { err.textContent='';  err.classList.add('hidden');   input.classList.remove('border-red-500','focus:ring-red-200'); input.removeAttribute('aria-invalid'); }
-  }
-  function validateName(input){
-    const v=String(input?.value||'').trim();
-    if (v.length<2) return 'Nama wajib diisi (min. 2 karakter).';
-    if (!/\S/.test(v)) return 'Nama tidak boleh hanya spasi.';
-    return '';
-  }
-  function normalizeIdPhone(raw){
-    const s=String(raw||'').trim(); if(!s) return {norm:'',ok:false};
-    const plus62=s.startsWith('+62'); const digits=s.replace(/\D+/g,'');
-    let norm=digits; if(plus62) norm='62'+digits.slice(2); else if(digits.startsWith('62')) norm=digits; else if(digits.startsWith('0')) norm='62'+digits.slice(1);
-    const ok=/^62[0-9]{9,13}$/.test(norm) && /^62[8]/.test(norm);
-    return {norm,ok};
-  }
-  function validatePhone(input){
-    const v=String(input?.value||'').trim();
-    if(!v) return {msg:'No WhatsApp wajib diisi.',norm:''};
-    const {norm,ok}=normalizeIdPhone(v);
-    if(!ok) return {msg:'Format WA harus diawali 08 / 62 / +62 dan valid.',norm:''};
-    return {msg:'',norm};
-  }
-
-  // Ringkasan
-  function currentMethod(){ return 'SNAP'; }
-  function updateSummary(){
-    const vSel = getVoucherSel();
-    const opt  = vSel ? vSel.options[vSel.selectedIndex] : null;
-    const name = opt ? (opt.getAttribute('data-name') || opt.textContent || '—') : '—';
-    const price= opt ? parseInt(opt.getAttribute('data-price') || 0,10) : 0;
-    if (sumName)   sumName.textContent  = name;
-    if (sumTotal)  sumTotal.textContent = rupiah(price);
-    if (sumMethod) sumMethod.textContent= 'Snap';
-  }
-
-  function getSelectedAmount(){
-    const vSel = getVoucherSel();
-    if (!vSel) return 0;
-    const opt = vSel.options[vSel.selectedIndex];
-    return opt ? parseInt(opt.getAttribute('data-price') || 0,10) : 0;
-  }
-
-  // Voucher AJAX
-  function rebuildVouchers(list){
-    const vSel = document.getElementById('voucherSelect');
-    if (!vSel) return;
-
-    vSel.innerHTML = '';
-
-    if (!Array.isArray(list) || list.length === 0){
-      vSel.disabled = true;
-      if (payBtn) payBtn.disabled = true;
-      if (noVoucher) noVoucher.classList.remove('hidden');
-      if (sumName)  sumName.textContent  = '—';
-      if (sumTotal) sumTotal.textContent = 'Rp0';
-      return;
-    }
-
-    if (noVoucher) noVoucher.classList.add('hidden');
-
-    const ph = document.createElement('option');
-    ph.value = '';
-    ph.textContent = '— Pilih Voucher —';
-    ph.disabled = true;
-    ph.selected = true;
-    vSel.appendChild(ph);
-
-    for (const v of list){
-      const o = document.createElement('option');
-      o.value = v.id;
-      o.textContent = `${v.name} — ${rupiah(v.price)}`;
-      o.setAttribute('data-name', v.name);
-      o.setAttribute('data-price', v.price);
-      vSel.appendChild(o);
-    }
-
-    vSel.disabled = false;
-    if (payBtn) payBtn.disabled = true;
-  }
-
-  async function fetchVouchers(cid){
-    const vSel = getVoucherSel();
-    try{
-      if (hidClient) hidClient.value = cid;
-      if (vSel){ vSel.disabled = true; vSel.innerHTML = '<option>Memuat…</option>'; }
-      if (payBtn) payBtn.disabled = true;
-
-      let res = await fetch(`${API_VOUCHERS_URL}?client=${encodeURIComponent(cid)}&client_id=${encodeURIComponent(cid)}`, { headers:{'Accept':'application/json'} });
-      if (!res.ok && (res.status===404 || res.status===405)){
-        res = await fetch(API_VOUCHERS_URL, { method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: JSON.stringify({ client: cid, client_id: cid }) });
-      }
-      if (!res.ok) throw new Error('HTTP '+res.status);
-
-      const json = await res.json();
-      const list = Array.isArray(json) ? json : (json.data || json.vouchers || json.items || []);
-      rebuildVouchers(list || []);
-    }catch(e){
-      console.error('Gagal memuat voucher:', e);
-      rebuildVouchers([]);
-    }
-  }
-
-  // Init
-  document.addEventListener('DOMContentLoaded', function(){
-    if (isBaseHost()){
-      const q = new URLSearchParams(location.search).get('client') || '';
-      if (!q) {
-        if (selClient) {
-          if (selClient.querySelector('option[value=""]')) { selClient.value = ''; }
-          else { selClient.selectedIndex = -1; }
-        }
-        const vSel = document.getElementById('voucherSelect');
-        if (vSel) { vSel.disabled = true; vSel.innerHTML = ''; }
-        if (noVoucher) { noVoucher.textContent = 'Pilih client untuk menampilkan voucher.'; noVoucher.classList.remove('hidden'); }
-        if (payBtn) payBtn.disabled = true;
-        if (hidClient) hidClient.value = '';
-        if (sumName)  sumName.textContent  = '—';
-        if (sumTotal) sumTotal.textContent = 'Rp0';
-      } else {
-        if (selClient) selClient.value = q;
-        if (hidClient) hidClient.value = q;
-      }
-    } else {
-      const cid = getResolvedClientId();
-      if (hidClient) hidClient.value = cid;
-    }
-
-    if (selClient){
-      if (selClient.hasAttribute('onchange')) selClient.removeAttribute('onchange');
-      selClient.onchange = null;
-
-      selClient.addEventListener('change', function(e){
-        e.preventDefault(); e.stopPropagation();
-        const newCid = selClient.value ? sanitizeClientId(selClient.value) : '';
-
-        if (!newCid){
-          if (hidClient) hidClient.value = '';
-          const vSel = document.getElementById('voucherSelect');
-          if (vSel) { vSel.disabled = true; vSel.innerHTML = ''; }
-          if (noVoucher) { noVoucher.textContent = 'Pilih client untuk menampilkan voucher.'; noVoucher.classList.remove('hidden'); }
-          if (payBtn) payBtn.disabled = true;
-
-          const url0 = new URL(location.href);
-          url0.searchParams.delete('client');
-          history.replaceState(null, '', url0.toString());
-          if (sumName)  sumName.textContent  = '—';
-          if (sumTotal) sumTotal.textContent = 'Rp0';
-          return false;
-        }
-
-        const url = new URL(location.href);
-        url.searchParams.set('client', newCid);
-        history.replaceState(null, '', url.toString());
-
-        if (hidClient) hidClient.value = newCid;
-        if (noVoucher) { noVoucher.textContent = 'Memuat voucher…'; noVoucher.classList.remove('hidden'); }
-        fetchVouchers(newCid);
-        return false;
-      }, true);
-    }
-
-    const vSelInit = document.getElementById('voucherSelect');
-    if (vSelInit){
-      vSelInit.addEventListener('change', function(){
-        const hasValue = !!this.value;
-        if (payBtn) payBtn.disabled = !hasValue;
-        updateSummary();
-      });
-      if (payBtn) payBtn.disabled = !(vSelInit.value);
-      updateSummary();
-    }
-
-    if (nameInput){
-      nameInput.addEventListener('input', ()=>showFieldError(nameInput, validateName(nameInput)));
-      nameInput.addEventListener('blur',  ()=>showFieldError(nameInput, validateName(nameInput)));
-    }
-    if (phoneInput){
-      phoneInput.addEventListener('input', ()=>showFieldError(phoneInput, validatePhone(phoneInput).msg));
-      phoneInput.addEventListener('blur',  ()=>showFieldError(phoneInput, validatePhone(phoneInput).msg));
-    }
-
-    const vSel = getVoucherSel();
-    if (vSel) vSel.addEventListener('change', updateSummary);
-    updateSummary();
-  });
-
-  // Submit → Snap
-  window.startCheckout = async function(e){
-    e.preventDefault();
-    if (errBox){ errBox.classList.add('hidden'); errBox.textContent=''; }
-
-    const cid = getResolvedClientId();
-    if (isBaseHost() && !cid){
-      if (errBox){ errBox.textContent = 'Silakan pilih client terlebih dahulu.'; errBox.classList.remove('hidden'); }
-      return false;
-    }
-
-    const nmErr = validateName(nameInput); if (nmErr){ showFieldError(nameInput, nmErr); return false; } else { showFieldError(nameInput, null); }
-    const { msg: phErr, norm: phoneNorm } = validatePhone(phoneInput); if (phErr){ showFieldError(phoneInput, phErr); return false; } else { showFieldError(phoneInput, null); }
-
-    const vSel = getVoucherSel();
-    if (!vSel || vSel.disabled || !vSel.value){
-      if (errBox){ errBox.textContent = 'Silakan pilih voucher terlebih dahulu.'; errBox.classList.remove('hidden'); }
-      return false;
-    }
-
-    const amount = getSelectedAmount();
-    if (!amount || amount < 1000){
-      if (errBox){ errBox.textContent = 'Nominal tidak valid.'; errBox.classList.remove('hidden'); }
-      return false;
-    }
-
-    const payload = {
-      amount,
-      name:  String(nameInput.value||'').trim(),
-      email: emailInput ? (emailInput.value||null) : null,
-      phone: phoneNorm || String(phoneInput.value||'').trim(),
-      voucher_id: Number(vSel.value),
-      client_id: cid,
-      // optional: enabled_payments → bisa kamu isi dari pilihan user kalau mau memaksa channel tertentu
-      // enabled_payments: ['bni_va','bri_va','permata_va','gopay','shopeepay']
-    };
-
-    setLoading(payBtn, true, 'Membuat transaksi…');
-
-    try{
-      const res = await fetch(API_SNAP_URL, {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json','Accept':'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-
-      if (!res.ok){
-        throw new Error(data.message || 'Gagal membuat transaksi.');
-      }
-
-      const orderId   = data.order_id;
-      const snapToken = data.snap_token;
-      const redirect  = data.redirect_url;
-
-      if (!orderId || !snapToken){
-        throw new Error('Token Snap tidak ditemukan.');
-      }
-
-      setLoading(payBtn, false);
-
-      // Popup Snap; fallback redirect jika snap.js tidak tersedia
-      if (window.snap && typeof window.snap.pay === 'function'){
-        window.snap.pay(snapToken, {
-          onSuccess: function(){ location.href = '/hotspot/order/'+encodeURIComponent(orderId); },
-          onPending: function(){ location.href = '/hotspot/order/'+encodeURIComponent(orderId); },
-          onError:   function(){ location.href = '/hotspot/order/'+encodeURIComponent(orderId)+'?error=1'; },
-          onClose:   function(){ /* user menutup popup */ }
-        });
-      } else if (redirect){
-        location.href = redirect;
-      } else {
-        location.href = '/hotspot/order/'+encodeURIComponent(orderId);
-      }
-
-      return false;
-
-    }catch(e){
-      setLoading(payBtn, false);
-      if (errBox){
-        errBox.textContent = e.message || 'Terjadi kesalahan.';
-        errBox.classList.remove('hidden');
-      }
-      return false;
+  const setLoading = (btn, isLoading, text) => {
+    if (!btn) return;
+    const label = btn.querySelector('.btn__label');
+    const spinner = btn.querySelector('.spinner');
+    btn.disabled = isLoading;
+    btn.setAttribute('aria-busy', isLoading);
+    if (spinner) spinner.classList.toggle('hidden', !isLoading);
+    if (label) {
+      if (btn.dataset.originalText === undefined) btn.dataset.originalText = label.textContent;
+      label.textContent = (isLoading && text) ? text : btn.dataset.originalText;
     }
   };
-})();
+
+  const showFieldError = (input, message) => {
+    const errEl = document.getElementById(input.id.replace('fld', 'err'));
+    if (!errEl) return;
+    errEl.textContent = message || '';
+    errEl.classList.toggle('hidden', !message);
+    input.classList.toggle('border-red-500', !!message);
+    input.setAttribute('aria-invalid', !!message);
+  };
+
+  // ===== Logika Validasi =====
+  const validateName = () => {
+    const value = nameInput.value.trim();
+    if (value.length < 2) return 'Nama wajib diisi (min. 2 karakter).';
+    if (!/\S/.test(value)) return 'Nama tidak boleh hanya spasi.';
+    return '';
+  };
+
+  const validatePhone = () => {
+    const raw = (phoneInput.value || '').trim();
+    if (!raw) return { msg: 'No. WhatsApp wajib diisi.', norm: '' };
+    
+    // Normalisasi nomor ke format 628...
+    let norm = raw.replace(/\D+/g, '');
+    if (norm.startsWith('0')) {
+      norm = '62' + norm.substring(1);
+    } else if (norm.startsWith('+62')) {
+      norm = norm.substring(1);
+    }
+    
+    if (!/^628[0-9]{8,13}$/.test(norm)) {
+      return { msg: 'Format No. WhatsApp tidak valid. Gunakan format 08...', norm: '' };
+    }
+    return { msg: '', norm };
+  };
+
+  // ===== Logika Aplikasi =====
+  const updateSummary = () => {
+    const selectedOption = voucherSelectEl.options[voucherSelectEl.selectedIndex];
+    if (!selectedOption || !selectedOption.value) {
+      sumVoucherName.textContent = '—';
+      sumTotal.textContent = rupiah(0);
+      payBtn.disabled = true;
+      return;
+    }
+    const name = selectedOption.dataset.name || 'Voucher';
+    const price = parseInt(selectedOption.dataset.price || 0, 10);
+    sumVoucherName.textContent = name;
+    sumTotal.textContent = rupiah(price);
+    payBtn.disabled = false;
+  };
+
+  const renderVouchers = (vouchers = []) => {
+    voucherSelectEl.innerHTML = '';
+    if (vouchers.length === 0) {
+      noVoucherBox.classList.remove('hidden');
+      voucherSelectEl.disabled = true;
+      updateSummary();
+      return;
+    }
+    noVoucherBox.classList.add('hidden');
+    
+    // Add placeholder
+    const placeholder = new Option('— Pilih Voucher —', '');
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    voucherSelectEl.add(placeholder);
+
+    vouchers.forEach(v => {
+      const option = new Option(`${v.name} — ${rupiah(v.price)}`, v.id);
+      option.dataset.name = v.name;
+      option.dataset.price = v.price;
+      voucherSelectEl.add(option);
+    });
+    voucherSelectEl.disabled = false;
+    updateSummary();
+  };
+
+  const fetchVouchers = async (clientId) => {
+    if (!clientId) {
+      renderVouchers([]);
+      return;
+    }
+    voucherSelectEl.disabled = true;
+    voucherSelectEl.innerHTML = '<option>Memuat voucher...</option>';
+    payBtn.disabled = true;
+    
+    try {
+      const response = await fetch(`${API_VOUCHERS_URL}?client_id=${encodeURIComponent(clientId)}`, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const json = await response.json();
+      renderVouchers(json.data || json.vouchers || json || []);
+    } catch (error) {
+      console.error("Gagal memuat voucher:", error);
+      renderVouchers([]);
+      noVoucherBox.textContent = "Gagal memuat voucher. Coba lagi nanti.";
+    }
+  };
+  
+  const handleClientChange = () => {
+    const newClientId = sanitizeClientId(clientSelectEl.value);
+    clientIdHiddenEl.value = newClientId;
+    
+    // Update URL query parameter without reloading
+    const url = new URL(window.location);
+    if (newClientId) {
+      url.searchParams.set('client', newClientId);
+    } else {
+      url.searchParams.delete('client');
+    }
+    history.replaceState(null, '', url.toString());
+
+    noVoucherBox.textContent = newClientId ? 'Memuat voucher...' : 'Pilih mitra untuk menampilkan voucher.';
+    fetchVouchers(newClientId);
+  };
+  
+  const startCheckout = async (event) => {
+    event.preventDefault();
+    payErrBox.classList.add('hidden');
+
+    // Validasi form
+    const nameError = validateName();
+    const phoneResult = validatePhone();
+    showFieldError(nameInput, nameError);
+    showFieldError(phoneInput, phoneResult.msg);
+    
+    if (nameError || phoneResult.msg || !voucherSelectEl.value) {
+        if (!voucherSelectEl.value) payErrBox.textContent = 'Silakan pilih voucher terlebih dahulu.';
+        payErrBox.classList.remove('hidden');
+        return;
+    }
+    
+    const selectedOption = voucherSelectEl.options[voucherSelectEl.selectedIndex];
+    const payload = {
+      amount: parseInt(selectedOption.dataset.price || 0, 10),
+      name: nameInput.value.trim(),
+      phone: phoneResult.norm,
+      email: emailInput.value.trim() || null,
+      voucher_id: Number(voucherSelectEl.value),
+      client_id: clientIdHiddenEl.value,
+    };
+    
+    setLoading(payBtn, true, 'Memproses...');
+
+    try {
+      const response = await fetch(API_SNAP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Gagal membuat transaksi.');
+      if (!data.snap_token) throw new Error('Token pembayaran tidak valid.');
+
+      // Buka Snap Popup
+      window.snap.pay(data.snap_token, {
+        onSuccess: () => location.href = `/hotspot/order/${encodeURIComponent(data.order_id)}`,
+        onPending: () => location.href = `/hotspot/order/${encodeURIComponent(data.order_id)}`,
+        onError:   () => location.href = `/hotspot/order/${encodeURIComponent(data.order_id)}?error=1`,
+        onClose:   () => setLoading(payBtn, false) // Aktifkan tombol kembali jika popup ditutup
+      });
+      
+    } catch (error) {
+      payErrBox.textContent = error.message;
+      payErrBox.classList.remove('hidden');
+      setLoading(payBtn, false);
+    }
+  };
+
+  // ===== Inisialisasi & Event Listeners =====
+  const init = () => {
+    if (clientSelectEl) {
+      clientSelectEl.addEventListener('change', handleClientChange);
+    }
+    
+    voucherSelectEl.addEventListener('change', updateSummary);
+    nameInput.addEventListener('blur', () => showFieldError(nameInput, validateName()));
+    phoneInput.addEventListener('blur', () => showFieldError(phoneInput, validatePhone().msg));
+    formEl.addEventListener('submit', startCheckout);
+    
+    // Update summary saat halaman pertama kali dimuat
+    updateSummary();
+  };
+
+  init();
+});
 </script>
 @endpush

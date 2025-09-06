@@ -41,7 +41,7 @@ class HotspotController extends Controller
     // voucher hanya di-load jika sudah ada client terpilih
     $vouchers = $selectedClientId ? \App\Models\HotspotVoucher::listForPortal($selectedClientId) : collect();
 
-    return view('hotspot.index', [
+    return view('hotspot.snap', [
       'vouchers'         => $vouchers,
       'resolvedClientId' => $selectedClientId, // bisa null
       'isBaseHost'       => $isBaseHost,
@@ -121,7 +121,7 @@ class HotspotController extends Controller
 
   public function orderView(string $orderId)
   {
-    return view('hotspot.order', [
+    return view('hotspot.order-snap', [
       'orderId'      => $orderId,
       'layoutHeader' => 'minimal',
     ]);
@@ -252,6 +252,144 @@ class HotspotController extends Controller
       if (stripos($msg, 'UPSTREAM_TEMPORARY') !== false || strpos($msg, '"status_code":"500"') !== false) { $code='UPSTREAM_TEMPORARY'; $http=503; }
       \Log::error('hotspot.checkout failed', ['order_id' => $orderId, 'err' => $msg]);
       return response()->json(['error' => $code, 'message' => $msg], $http);
+    }
+  }
+
+  public function checkoutSnap(Request $r)
+  {
+    // Inisialisasi Midtrans
+    \Midtrans\Config::$serverKey    = config('midtrans.server_key') ?: env('MIDTRANS_SERVER_KEY', '');
+    \Midtrans\Config::$isProduction = (bool) (config('midtrans.is_production') ?? env('MIDTRANS_IS_PRODUCTION', false));
+    if (property_exists(\Midtrans\Config::class, 'isSanitized')) \Midtrans\Config::$isSanitized = true;
+
+    $data = $r->validate([
+      'amount'     => 'required|integer|min:1000',
+      'name'       => 'nullable|string|max:100',
+      'email'      => 'nullable|email',
+      'phone'      => 'nullable|string|max:30',
+      'voucher_id' => 'required|integer',
+      'client_id'  => 'nullable|string|max:50',
+      // 'enabled_payments' => 'array', // opsional
+    ]);
+
+    // --- RESOLVE CLIENT SECARA TEGAS ---
+    $host       = strtolower($r->getHost());
+    $isBaseHost = ($host === 'pay.adanih.info');
+
+    // Resolve client from payload or fallback to resolver
+    $clientFromPayload = strtoupper(preg_replace('/[^A-Z0-9]/', '', (string)($data['client_id'] ?? '')));
+    $clientId = null;
+    if ($clientFromPayload !== '') {
+      $row = DB::table('clients')
+        ->where('is_active', 1)
+        ->where(function($w) use ($clientFromPayload) {
+          $w->where('client_id', $clientFromPayload)
+            ->orWhere('slug', $clientFromPayload);
+        })
+        ->select('client_id')
+        ->first();
+      if ($row) {
+        $clientId = $row->client_id; // valid dari payload
+      }
+    }
+
+    if (!$clientId) {
+      $clientId = \App\Support\ClientResolver::resolve($r);
+    }
+
+    // --- Validasi voucher milik client ---
+    $voucher = \App\Models\HotspotVoucher::query()
+      ->where('id', (int)$data['voucher_id'])
+      ->forClient($clientId)
+      ->where('is_active', true)
+      ->first();
+
+    if (!$voucher) {
+      return response()->json([
+        'error' => 'INVALID_VOUCHER',
+        'message' => 'Voucher tidak tersedia untuk lokasi ini.'
+      ], 422);
+    }
+
+    $orderId = OrderId::make($clientId);
+
+    $voucher = \App\Models\HotspotVoucher::findOrFail($data['voucher_id']);
+
+    $payload = [
+      'transaction_details' => [
+        'order_id'     => $orderId,
+        'gross_amount' => (int) $data['amount'],
+      ],
+      'customer_details' => [
+        'first_name' => $data['name']  ?? null,
+        'email'      => $data['email'] ?? null,
+        'phone'      => $data['phone'] ?? null,
+      ],
+      // Kalau mau membatasi channel, kirim dari FE lalu forward ke sini
+      // 'enabled_payments' => $r->input('enabled_payments', []),
+
+      'callbacks' => [
+        'finish' => url('/hotspot/order/'.$orderId),
+      ],
+      'expiry' => [
+        'unit'     => 'minutes',
+        'duration' => 30,
+      ],
+    ];
+
+    try {
+      // Bisa balikan stdClass -> ubah ke array agar aman dipakai
+      $respObj = \Midtrans\Snap::createTransaction($payload);
+      $snap    = is_array($respObj) ? $respObj : json_decode(json_encode($respObj), true);
+
+      // Fallback kalau SDK yang dipakai tidak balikan redirect_url/token
+      if (empty($snap['token'])) {
+        // sebagian versi SDK menyediakan helper ini
+        if (method_exists(\Midtrans\Snap::class, 'createTransactionToken')) {
+          $snap['token'] = \Midtrans\Snap::createTransactionToken($payload);
+        } elseif (method_exists(\Midtrans\Snap::class, 'getSnapToken')) {
+          $snap['token'] = \Midtrans\Snap::getSnapToken($payload);
+        }
+      }
+
+      // Simpan Hotspot Order
+      \App\Models\HotspotOrder::updateOrCreate(
+        ['order_id' => $orderId],
+        [
+          'client_id'           => $clientId,
+          'hotspot_voucher_id'  => $voucher->id,
+          'buyer_name'          => $data['name'] ?? null,
+          'buyer_email'         => $data['email'] ?? null,
+          'buyer_phone'         => $data['phone'] ?? null,
+        ]
+      );
+
+      // Simpan Payment
+      \App\Models\Payment::updateOrCreate(
+        ['order_id' => $orderId],
+        [
+          'client_id'    => $clientId,
+          'provider'     => 'midtrans',
+          'amount'       => (int)$voucher->price,
+          'currency'     => 'IDR',
+          'status'       => $snap['status'] ?? 'PENDING',
+          'qr_string'    => $snap['qr_string'] ?? null,
+          'raw'          => $snap,
+          'actions'      => $snap['actions'] ?? null,
+        ]
+      );
+
+      // Kirim invoice via WhatsApp
+      $this->waSendInvoice($data, $orderId, $voucher, $snap);
+
+      return response()->json([
+        'order_id'     => $orderId,
+        'snap_token'   => $snap['token'] ?? null,
+        'redirect_url' => $snap['redirect_url'] ?? null,
+      ], 201);
+    } catch (\Throwable $e) {
+      \Log::error('snap.create.failed', ['order_id' => $orderId, 'err' => $e->getMessage()]);
+      return response()->json(['error'=>'PAYMENT_CREATE_FAILED','message'=>$e->getMessage()], 502);
     }
   }
 
