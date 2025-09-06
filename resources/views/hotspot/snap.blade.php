@@ -64,21 +64,42 @@
 
     <form id="formCheckout" class="space-y-3" novalidate>
       {{-- Tampil hanya jika di base host --}}
-      @if($isBaseHost)
-      <div class="subcard">
-        <div class="subcard-hd">Pilih Mitra</div>
-        <div class="subcard-bd">
-          <label for="clientSelect" class="block text-sm font-medium mb-1">Mitra</label>
-          <select id="clientSelect" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" autocomplete="off">
-            <option value="" disabled @if(empty($resolvedClientId)) selected @endif>— Pilih Mitra —</option>
-            @foreach($clients as $c)
-              <option value="{{ $c->client_id }}" data-slug="{{ $c->slug }}" @selected($resolvedClientId === $c->client_id)>
-                {{ $c->name }} ({{ $c->client_id }})
-              </option>
-            @endforeach
-          </select>
+      @php
+        // Normalisasi supaya perbandingan stabil (hindari auto-select salah)
+        $currentClientId = old('client', (string)($resolvedClientId ?? ''));
+      @endphp
+
+      @if ($isBaseHost)
+        <div class="subcard">
+          <div class="subcard-hd">Pilih Mitra</div>
+          <div class="subcard-bd">
+            <label for="clientSelect" class="block text-sm font-medium mb-1">Mitra</label>
+
+            <select
+              id="clientSelect"
+              name="client"
+              class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
+              autocomplete="off"
+              required
+            >
+              {{-- Placeholder: tetap terpilih saat belum ada pilihan --}}
+              <option value="" disabled @selected($currentClientId === '')>— Pilih Mitra —</option>
+
+              @forelse ($clients as $c)
+                <option
+                  value="{{ $c->client_id }}"
+                  data-slug="{{ $c->slug }}"
+                  @selected((string)$currentClientId === (string)$c->client_id)
+                >
+                  {{ $c->name }} ({{ $c->client_id }})
+                </option>
+              @empty
+                <option value="" disabled selected>Tidak ada mitra aktif</option>
+              @endforelse
+            </select>
+            <small class="text-xs text-gray-500">Pilih mitra terlebih dahulu sebelum lanjut, dawg.</small>
+          </div>
         </div>
-      </div>
       @endif
 
       {{-- Nilai client_id disimpan di sini sebagai satu-satunya sumber kebenaran --}}
