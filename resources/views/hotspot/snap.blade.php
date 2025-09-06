@@ -105,26 +105,43 @@
       <input type="hidden" id="client_id" name="client_id" value="{{ $selectedClientId ?? '' }}">
 
       {{-- Pilihan Voucher --}}
+      @php
+        $selectedVoucherId = (string) old('voucher_id', '');
+      @endphp
+
       <div class="subcard">
         <div class="subcard-hd">Pilih Voucher</div>
         <div class="subcard-bd">
           <label for="voucherSelect" class="block text-sm font-medium mb-1">Voucher</label>
-          <select id="voucherSelect" name="voucher_id"
+
+          <select
+            id="voucherSelect"
+            name="voucher_id"
             class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
-            @if($selectedClientId === '') disabled @endif required>
-            @if($selectedClientId !== '' && $vouchers->isNotEmpty())
+            @if(empty($selectedClientId)) disabled @endif
+            required
+          >
+            {{-- SELALU ada placeholder agar tidak auto-select --}}
+            <option value="" disabled @selected($selectedVoucherId === '')>— Pilih Voucher —</option>
+
+            @if(!empty($selectedClientId) && $vouchers->isNotEmpty())
               @foreach($vouchers as $v)
-                <option value="{{ $v->id }}" data-name="{{ $v->name }}" data-price="{{ (int)$v->price }}">
+                <option
+                  value="{{ $v->id }}"
+                  data-name="{{ $v->name }}"
+                  data-price="{{ (int) $v->price }}"
+                  @selected((string) $selectedVoucherId === (string) $v->id)
+                >
                   {{ $v->name }} — Rp{{ number_format($v->price,0,',','.') }}
                 </option>
               @endforeach
             @endif
           </select>
-          
+
           <div id="noVoucherBox"
             class="mt-2 p-3 text-sm text-gray-600 border rounded bg-gray-50
-            @if($selectedClientId !== '' && $vouchers->isNotEmpty()) hidden @endif">
-            @if($selectedClientId === '')
+            @if(!empty($selectedClientId) && $vouchers->isNotEmpty()) hidden @endif">
+            @if(empty($selectedClientId))
               Pilih mitra untuk menampilkan voucher.
             @else
               Belum ada voucher untuk mitra ini.
@@ -405,28 +422,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // ===== Inisialisasi & Event Listeners =====
   const init = () => {
-    if (clientSelectEl) {
-      clientSelectEl.addEventListener('change', handleClientChange);
-    } else {
-      const cid = normalizeClientId(clientIdHiddenEl?.value);
-      if (cid) {
-        // Kalau server belum isi opsi, baru fetch. Kalau sudah ada, cukup refresh summary.
-        if (!voucherSelectEl.options.length) {
-          fetchVouchers(cid);
-        } else {
-          voucherSelectEl.disabled = false;
-          document.getElementById('noVoucherBox')?.classList.add('hidden');
-          updateSummary();
-        }
+    // === Wire events (aman kalau elemennya nggak ada) ===
+    clientSelectEl?.addEventListener('change', handleClientChange);
+    voucherSelectEl?.addEventListener('change', updateSummary);
+    nameInput?.addEventListener('blur', () => showFieldError(nameInput, validateName()));
+    phoneInput?.addEventListener('blur', () => showFieldError(phoneInput, validatePhone().msg));
+    formEl?.addEventListener('submit', startCheckout);
+
+    // === Subdomain flow: tidak ada dropdown client, tapi hidden client_id ada ===
+    const cid = normalizeClientId(clientIdHiddenEl?.value);
+    if (!clientSelectEl && cid) {
+      if (!voucherSelectEl?.options?.length) {
+        // SSR tidak mengisi opsi → fetch via API (renderVouchers akan call updateSummary)
+        fetchVouchers(cid);
+      } else {
+        // SSR sudah isi → pastikan UI siap
+        voucherSelectEl.disabled = false;
+        noVoucherBox?.classList.add('hidden');
       }
     }
 
+    // === Pastikan placeholder voucher terpilih bila belum ada pilihan valid ===
+    if (voucherSelectEl) {
+      const first = voucherSelectEl.options[0];
+      if (first && first.value === '' && !voucherSelectEl.value) {
+        voucherSelectEl.selectedIndex = 0;
+      }
+    }
 
-    voucherSelectEl.addEventListener('change', updateSummary);
-    nameInput.addEventListener('blur', () => showFieldError(nameInput, validateName()));
-    phoneInput.addEventListener('blur', () => showFieldError(phoneInput, validatePhone().msg));
-    formEl.addEventListener('submit', startCheckout);
-
+    // === Initial summary ===
     updateSummary();
   };
 
