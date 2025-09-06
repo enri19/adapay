@@ -59,10 +59,9 @@
     </div>
 
     @php
-      // Konsolidasikan sumber kebenaran ID client untuk view ini
-      // Di base host: bisa kosong (placeholder aktif)
-      // Di subdomain: harus berisi ID client hasil resolver
-      $selectedClientId = (string) ($resolvedClientId ?? '');
+      // dari controller: $resolvedClientId bisa null (base host) atau string (subdomain/query)
+      $selectedClientId  = (string) ($resolvedClientId ?? '');
+      $selectedVoucherId = (string) old('voucher_id', '');
     @endphp
 
     <form id="formCheckout" class="space-y-3" novalidate>
@@ -73,22 +72,16 @@
           <div class="subcard-bd">
             <label for="clientSelect" class="block text-sm font-medium mb-1">Mitra</label>
 
-            <select
-              id="clientSelect"
-              name="client"
-              class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
-              autocomplete="off"
-              required
-            >
-              {{-- Placeholder TIDAK disabled supaya bisa benar2 terpilih --}}
-              <option value="" @selected($selectedClientId === '')>— Pilih Mitra —</option>
+            <select id="clientSelect" name="client"
+                    class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
+                    autocomplete="off" required>
+              {{-- placeholder TIDAK disabled supaya bisa benar-benar terpilih --}}
+              <option value="" {{ $selectedClientId === '' ? 'selected' : '' }}>— Pilih Mitra —</option>
 
               @forelse ($clients as $c)
-                <option
-                  value="{{ $c->client_id }}"
-                  data-slug="{{ $c->slug }}"
-                  @if(!empty($selectedClientId) && $selectedClientId === $c->client_id) selected @endif
-                >
+                <option value="{{ $c->client_id }}"
+                        data-slug="{{ $c->slug }}"
+                        {{ (string)$selectedClientId === (string)$c->client_id ? 'selected' : '' }}>
                   {{ $c->name }} ({{ $c->client_id }})
                 </option>
               @empty
@@ -96,42 +89,32 @@
               @endforelse
             </select>
 
-            <small class="text-xs text-gray-500">Pilih mitra terlebih dahulu sebelum lanjut, dawg.</small>
+            <small class="text-xs text-gray-500">Pilih mitra terlebih dahulu sebelum lanjut.</small>
           </div>
         </div>
       @endif
 
       {{-- Nilai client_id disimpan di sini sebagai satu-satunya sumber kebenaran --}}
-      <input type="hidden" id="client_id" name="client_id" value="{{ $selectedClientId ?? '' }}">
+      <input type="hidden" id="client_id" name="client_id" value="{{ $selectedClientId }}">
 
       {{-- Pilihan Voucher --}}
-      @php
-        $selectedVoucherId = (string) old('voucher_id', '');
-      @endphp
-
       <div class="subcard">
         <div class="subcard-hd">Pilih Voucher</div>
         <div class="subcard-bd">
           <label for="voucherSelect" class="block text-sm font-medium mb-1">Voucher</label>
 
-          <select
-            id="voucherSelect"
-            name="voucher_id"
-            class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
-            @if(empty($selectedClientId)) disabled @endif
-            required
-          >
+          <select id="voucherSelect" name="voucher_id"
+                  class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200"
+                  {{ $selectedClientId === '' ? 'disabled' : '' }} required>
             {{-- SELALU ada placeholder agar tidak auto-select --}}
-            <option value="" disabled @selected($selectedVoucherId === '')>— Pilih Voucher —</option>
+            <option value="" {{ $selectedVoucherId === '' ? 'selected' : '' }}>— Pilih Voucher —</option>
 
-            @if(!empty($selectedClientId) && $vouchers->isNotEmpty())
+            @if($selectedClientId !== '' && $vouchers->isNotEmpty())
               @foreach($vouchers as $v)
-                <option
-                  value="{{ $v->id }}"
-                  data-name="{{ $v->name }}"
-                  data-price="{{ (int) $v->price }}"
-                  @selected((string) $selectedVoucherId === (string) $v->id)
-                >
+                <option value="{{ $v->id }}"
+                        data-name="{{ $v->name }}"
+                        data-price="{{ (int)$v->price }}"
+                        {{ (string)$selectedVoucherId === (string)$v->id ? 'selected' : '' }}>
                   {{ $v->name }} — Rp{{ number_format($v->price,0,',','.') }}
                 </option>
               @endforeach
@@ -139,9 +122,8 @@
           </select>
 
           <div id="noVoucherBox"
-            class="mt-2 p-3 text-sm text-gray-600 border rounded bg-gray-50
-            @if(!empty($selectedClientId) && $vouchers->isNotEmpty()) hidden @endif">
-            @if(empty($selectedClientId))
+              class="mt-2 p-3 text-sm text-gray-600 border rounded bg-gray-50 {{ ($selectedClientId !== '' && $vouchers->isNotEmpty()) ? 'hidden' : '' }}">
+            @if($selectedClientId === '')
               Pilih mitra untuk menampilkan voucher.
             @else
               Belum ada voucher untuk mitra ini.
@@ -149,6 +131,7 @@
           </div>
         </div>
       </div>
+
 
       {{-- Data Pembeli --}}
       <div class="subcard">
@@ -213,30 +196,28 @@
 </div>
 @endsection
 
-@push('scripts')
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', () => {
   "use strict";
 
-  // ===== Konfigurasi & URL API =====
   const API_VOUCHERS_URL = "{{ url('/api/hotspot/vouchers') }}";
-  const API_SNAP_URL = "{{ url('/api/hotspot/checkout-snap') }}";
+  const API_SNAP_URL     = "{{ url('/api/hotspot/checkout-snap') }}";
 
-  // ===== Elemen DOM =====
-  const formEl = document.getElementById('formCheckout');
-  const clientSelectEl = document.getElementById('clientSelect');
-  const clientIdHiddenEl = document.getElementById('client_id');
+  // DOM
+  const formEl          = document.getElementById('formCheckout');
+  const clientSelectEl  = document.getElementById('clientSelect');   // hanya ada di base host
+  const clientIdHidden  = document.getElementById('client_id');      // sumber kebenaran
   const voucherSelectEl = document.getElementById('voucherSelect');
-  const noVoucherBox = document.getElementById('noVoucherBox');
-  const payBtn = document.getElementById('payBtn');
-  const payErrBox = document.getElementById('payErr');
-  const nameInput = document.getElementById('fldName');
-  const phoneInput = document.getElementById('fldPhone');
-  const emailInput = document.getElementById('fldEmail');
-  const sumVoucherName = document.getElementById('sumVoucherName');
-  const sumTotal = document.getElementById('sumTotal');
+  const noVoucherBox    = document.getElementById('noVoucherBox');
+  const payBtn          = document.getElementById('payBtn');
+  const payErrBox       = document.getElementById('payErr');
+  const nameInput       = document.getElementById('fldName');
+  const phoneInput      = document.getElementById('fldPhone');
+  const emailInput      = document.getElementById('fldEmail');
+  const sumVoucherName  = document.getElementById('sumVoucherName');
+  const sumTotal        = document.getElementById('sumTotal');
 
-  // ===== Helper Functions =====
+  // Helpers
   const rupiah = (n) => 'Rp' + Math.max(0, parseInt(n || 0, 10)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   const normalizeClientId = (s) => String(s ?? '').trim();
 
@@ -246,7 +227,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const spinner = btn.querySelector('.spinner');
     btn.disabled = isLoading;
     btn.setAttribute('aria-busy', isLoading);
-    if (spinner) spinner.classList.toggle('hidden', !isLoading);
+    spinner?.classList.toggle('hidden', !isLoading);
     if (label) {
       if (btn.dataset.originalText === undefined) btn.dataset.originalText = label.textContent;
       label.textContent = (isLoading && text) ? text : btn.dataset.originalText;
@@ -262,43 +243,33 @@ document.addEventListener('DOMContentLoaded', function() {
     input.setAttribute('aria-invalid', !!message);
   };
 
-  // ===== Logika Validasi =====
   const validateName = () => {
-    const value = nameInput.value.trim();
-    if (value.length < 2) return 'Nama wajib diisi (min. 2 karakter).';
-    if (!/\S/.test(value)) return 'Nama tidak boleh hanya spasi.';
+    const v = nameInput.value.trim();
+    if (v.length < 2) return 'Nama wajib diisi (min. 2 karakter).';
+    if (!/\S/.test(v)) return 'Nama tidak boleh hanya spasi.';
     return '';
   };
 
   const validatePhone = () => {
     const raw = (phoneInput.value || '').trim();
     if (!raw) return { msg: 'No. WhatsApp wajib diisi.', norm: '' };
-    
-    // Normalisasi nomor ke format 628...
     let norm = raw.replace(/\D+/g, '');
-    if (norm.startsWith('0')) {
-      norm = '62' + norm.substring(1);
-    } else if (norm.startsWith('+62')) {
-      norm = norm.substring(1);
-    }
-    
-    if (!/^628[0-9]{8,13}$/.test(norm)) {
-      return { msg: 'Format No. WhatsApp tidak valid. Gunakan format 08...', norm: '' };
-    }
+    if (norm.startsWith('0')) norm = '62' + norm.substring(1);
+    else if (norm.startsWith('+62')) norm = norm.substring(1);
+    if (!/^628[0-9]{8,13}$/.test(norm)) return { msg: 'Format No. WhatsApp tidak valid. Gunakan format 08...', norm: '' };
     return { msg: '', norm };
   };
 
-  // ===== Logika Aplikasi =====
   const updateSummary = () => {
-    const selectedOption = voucherSelectEl.options[voucherSelectEl.selectedIndex];
-    if (!selectedOption || !selectedOption.value) {
+    const opt = voucherSelectEl.options[voucherSelectEl.selectedIndex];
+    if (!opt || !opt.value) {
       sumVoucherName.textContent = '—';
       sumTotal.textContent = rupiah(0);
       payBtn.disabled = true;
       return;
     }
-    const name = selectedOption.dataset.name || 'Voucher';
-    const price = parseInt(selectedOption.dataset.price || 0, 10);
+    const name  = opt.dataset.name || 'Voucher';
+    const price = parseInt(opt.dataset.price || 0, 10);
     sumVoucherName.textContent = name;
     sumTotal.textContent = rupiah(price);
     payBtn.disabled = false;
@@ -306,59 +277,53 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const renderVouchers = (vouchers = []) => {
     voucherSelectEl.innerHTML = '';
-    if (vouchers.length === 0) {
-      noVoucherBox.classList.remove('hidden');
+
+    // placeholder (tidak disabled supaya bisa tampil sebagai pilihan aktif)
+    const ph = new Option('— Pilih Voucher —', '');
+    ph.selected = true;
+    voucherSelectEl.add(ph);
+
+    if (!Array.isArray(vouchers) || vouchers.length === 0) {
+      noVoucherBox?.classList.remove('hidden');
       voucherSelectEl.disabled = true;
       updateSummary();
       return;
     }
-    noVoucherBox.classList.add('hidden');
-    
-    // Add placeholder
-    const placeholder = new Option('— Pilih Voucher —', '');
-    placeholder.disabled = true;
-    placeholder.selected = true;
-    voucherSelectEl.add(placeholder);
 
     vouchers.forEach(v => {
-      const option = new Option(`${v.name} — ${rupiah(v.price)}`, v.id);
-      option.dataset.name = v.name;
-      option.dataset.price = v.price;
-      voucherSelectEl.add(option);
+      const o = new Option(`${v.name} — ${rupiah(v.price)}`, v.id);
+      o.dataset.name  = v.name;
+      o.dataset.price = v.price;
+      voucherSelectEl.add(o);
     });
+
     voucherSelectEl.disabled = false;
+    noVoucherBox?.classList.add('hidden');
     updateSummary();
   };
 
   const fetchVouchers = async (clientId) => {
-    if (!clientId) {
-      renderVouchers([]);
-      return;
-    }
+    if (!clientId) { renderVouchers([]); return; }
     voucherSelectEl.disabled = true;
-    voucherSelectEl.innerHTML = '<option>Memuat voucher...</option>';
+    voucherSelectEl.innerHTML = '<option value="">Memuat voucher...</option>';
     payBtn.disabled = true;
-    
     try {
-      const response = await fetch(`${API_VOUCHERS_URL}?client_id=${encodeURIComponent(clientId)}`, {
-        headers: { 'Accept': 'application/json' }
-      });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const json = await response.json();
+      const res = await fetch(`${API_VOUCHERS_URL}?client_id=${encodeURIComponent(clientId)}`, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
       renderVouchers(json.data || json.vouchers || json || []);
-    } catch (error) {
-      console.error("Gagal memuat voucher:", error);
+    } catch (e) {
+      console.error('Gagal memuat voucher:', e);
+      noVoucherBox.textContent = 'Gagal memuat voucher. Coba lagi nanti.';
       renderVouchers([]);
-      noVoucherBox.textContent = "Gagal memuat voucher. Coba lagi nanti.";
     }
   };
-  
-  const handleClientChange = () => {
-    const newClientId = normalizeClientId(clientSelectEl.value); // tanpa potong/ubah case
-    clientIdHiddenEl.value = newClientId;
 
-    // Update URL tanpa reload
-    const url = new URL(window.location);
+  const handleClientChange = () => {
+    const newClientId = normalizeClientId(clientSelectEl.value);
+    clientIdHidden.value = newClientId;
+
+    const url = new URL(location.href);
     if (newClientId) url.searchParams.set('client', newClientId);
     else url.searchParams.delete('client');
     history.replaceState(null, '', url.toString());
@@ -366,95 +331,83 @@ document.addEventListener('DOMContentLoaded', function() {
     noVoucherBox.textContent = newClientId ? 'Memuat voucher...' : 'Pilih mitra untuk menampilkan voucher.';
     fetchVouchers(newClientId);
   };
-  
-  const startCheckout = async (event) => {
-    event.preventDefault();
+
+  const startCheckout = async (e) => {
+    e.preventDefault();
     payErrBox.classList.add('hidden');
 
-    // Validasi form
-    const nameError = validateName();
-    const phoneResult = validatePhone();
-    showFieldError(nameInput, nameError);
-    showFieldError(phoneInput, phoneResult.msg);
-    
-    if (nameError || phoneResult.msg || !voucherSelectEl.value) {
-        if (!voucherSelectEl.value) payErrBox.textContent = 'Silakan pilih voucher terlebih dahulu.';
-        payErrBox.classList.remove('hidden');
-        return;
-    }
-    
-    const selectedOption = voucherSelectEl.options[voucherSelectEl.selectedIndex];
-    const payload = {
-      amount: parseInt(selectedOption.dataset.price || 0, 10),
-      name: nameInput.value.trim(),
-      phone: phoneResult.norm,
-      email: emailInput.value.trim() || null,
-      voucher_id: Number(voucherSelectEl.value),
-      client_id: clientIdHiddenEl.value,
-    };
-    
-    setLoading(payBtn, true, 'Memproses...');
+    const nameErr = validateName();
+    const phoneRes = validatePhone();
+    showFieldError(nameInput, nameErr);
+    showFieldError(phoneInput, phoneRes.msg);
 
+    if (nameErr || phoneRes.msg || !voucherSelectEl.value) {
+      if (!voucherSelectEl.value) { payErrBox.textContent = 'Silakan pilih voucher terlebih dahulu.'; payErrBox.classList.remove('hidden'); }
+      return;
+    }
+
+    const opt = voucherSelectEl.options[voucherSelectEl.selectedIndex];
+    const payload = {
+      amount    : parseInt(opt.dataset.price || 0, 10),
+      name      : nameInput.value.trim(),
+      phone     : phoneRes.norm,
+      email     : emailInput.value.trim() || null,
+      voucher_id: Number(voucherSelectEl.value),
+      client_id : clientIdHidden.value,
+    };
+
+    setLoading(payBtn, true, 'Memproses...');
     try {
-      const response = await fetch(API_SNAP_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Gagal membuat transaksi.');
+      const res  = await fetch(API_SNAP_URL, { method:'POST', headers:{ 'Content-Type':'application/json', 'Accept':'application/json' }, body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Gagal membuat transaksi.');
       if (!data.snap_token) throw new Error('Token pembayaran tidak valid.');
 
-      // Buka Snap Popup
       window.snap.pay(data.snap_token, {
         onSuccess: () => location.href = `/hotspot/order/${encodeURIComponent(data.order_id)}`,
         onPending: () => location.href = `/hotspot/order/${encodeURIComponent(data.order_id)}`,
-        onError:   () => location.href = `/hotspot/order/${encodeURIComponent(data.order_id)}?error=1`,
-        onClose:   () => setLoading(payBtn, false) // Aktifkan tombol kembali jika popup ditutup
+        onError  : () => location.href = `/hotspot/order/${encodeURIComponent(data.order_id)}?error=1`,
+        onClose  : () => setLoading(payBtn, false),
       });
-      
-    } catch (error) {
-      payErrBox.textContent = error.message;
+    } catch (err) {
+      payErrBox.textContent = err.message;
       payErrBox.classList.remove('hidden');
       setLoading(payBtn, false);
     }
   };
 
-  // ===== Inisialisasi & Event Listeners =====
+  // === INIT (rapi & idempotent) ===
   const init = () => {
-    // === Wire events (aman kalau elemennya nggak ada) ===
-    clientSelectEl?.addEventListener('change', handleClientChange);
-    voucherSelectEl?.addEventListener('change', updateSummary);
-    nameInput?.addEventListener('blur', () => showFieldError(nameInput, validateName()));
-    phoneInput?.addEventListener('blur', () => showFieldError(phoneInput, validatePhone().msg));
-    formEl?.addEventListener('submit', startCheckout);
+    // Events
+    clientSelectEl && clientSelectEl.addEventListener('change', handleClientChange);
+    voucherSelectEl && voucherSelectEl.addEventListener('change', updateSummary);
+    nameInput && nameInput.addEventListener('blur', () => showFieldError(nameInput, validateName()));
+    phoneInput && phoneInput.addEventListener('blur', () => showFieldError(phoneInput, validatePhone().msg));
+    formEl && formEl.addEventListener('submit', startCheckout);
 
-    // === Subdomain flow: tidak ada dropdown client, tapi hidden client_id ada ===
-    const cid = normalizeClientId(clientIdHiddenEl?.value);
-    if (!clientSelectEl && cid) {
-      if (!voucherSelectEl?.options?.length) {
-        // SSR tidak mengisi opsi → fetch via API (renderVouchers akan call updateSummary)
-        fetchVouchers(cid);
-      } else {
-        // SSR sudah isi → pastikan UI siap
-        voucherSelectEl.disabled = false;
-        noVoucherBox?.classList.add('hidden');
+    // Subdomain flow: tidak ada dropdown client; pakai hidden client_id dari server
+    if (!clientSelectEl) {
+      const cid = normalizeClientId(clientIdHidden?.value);
+      if (cid) {
+        // Jika SSR belum isi opsi voucher, fetch; kalau sudah, cukup enable UI
+        const onlyPlaceholder = voucherSelectEl.options.length <= 1 && (!voucherSelectEl.options.length || voucherSelectEl.options[0].value === '');
+        if (onlyPlaceholder) {
+          fetchVouchers(cid);
+        } else {
+          voucherSelectEl.disabled = false;
+          noVoucherBox?.classList.add('hidden');
+        }
       }
     }
 
-    // === Pastikan placeholder voucher terpilih bila belum ada pilihan valid ===
-    if (voucherSelectEl) {
-      const first = voucherSelectEl.options[0];
-      if (first && first.value === '' && !voucherSelectEl.value) {
-        voucherSelectEl.selectedIndex = 0;
-      }
+    // Pastikan placeholder voucher terpilih bila belum ada pilihan valid
+    if (voucherSelectEl && !voucherSelectEl.value) {
+      voucherSelectEl.selectedIndex = 0;
     }
 
-    // === Initial summary ===
     updateSummary();
   };
 
   init();
 });
 </script>
-@endpush
