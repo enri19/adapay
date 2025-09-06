@@ -58,6 +58,13 @@
       </div>
     </div>
 
+    @php
+      // Konsolidasikan sumber kebenaran ID client untuk view ini
+      // Di base host: bisa kosong (placeholder aktif)
+      // Di subdomain: harus berisi ID client hasil resolver
+      $selectedClientId = (string) ($resolvedClientId ?? '');
+    @endphp
+
     <form id="formCheckout" class="space-y-3" novalidate>
       {{-- Tampil hanya jika di base host --}}
       @if ($isBaseHost)
