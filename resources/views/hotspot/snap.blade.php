@@ -102,9 +102,9 @@
         <div class="subcard-hd">Pilih Voucher</div>
         <div class="subcard-bd">
           <label for="voucherSelect" class="block text-sm font-medium mb-1">Voucher</label>
-          <select id="voucherSelect" name="voucher_id" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" @if(empty($resolvedClientId)) disabled @endif required>
+          <select id="voucherSelect" name="voucher_id" class="border rounded p-2 w-full focus:ring-2 focus:ring-blue-200" @if(empty($selectedClientId)) disabled @endif required>
             {{-- Opsi voucher akan diisi oleh JavaScript --}}
-            @if(!empty($resolvedClientId) && $vouchers->isNotEmpty())
+            @if(!empty($selectedClientId) && $vouchers->isNotEmpty())
               @foreach($vouchers as $v)
                 <option value="{{ $v->id }}" data-name="{{ $v->name }}" data-price="{{ (int)$v->price }}">
                   {{ $v->name }} — Rp{{ number_format($v->price,0,',','.') }}
@@ -112,8 +112,8 @@
               @endforeach
             @endif
           </select>
-          <div id="noVoucherBox" class="mt-2 p-3 text-sm text-gray-600 border rounded bg-gray-50 @if(!empty($resolvedClientId) && $vouchers->isNotEmpty()) hidden @endif">
-            @if(empty($resolvedClientId)) Pilih mitra untuk menampilkan voucher. @else Belum ada voucher untuk mitra ini. @endif
+          <div id="noVoucherBox" class="mt-2 p-3 text-sm text-gray-600 border rounded bg-gray-50 @if(!empty($selectedClientId) && $vouchers->isNotEmpty()) hidden @endif">
+            @if(empty($selectedClientId)) Pilih mitra untuk menampilkan voucher. @else Belum ada voucher untuk mitra ini. @endif
           </div>
         </div>
       </div>
@@ -167,7 +167,7 @@
 
       <p id="payErr" class="text-xs text-red-600 hidden"></p>
 
-      <button id="payBtn" type="submit" class="btn btn--primary" @if(empty($resolvedClientId) || $vouchers->isEmpty()) disabled @endif>
+      <button id="payBtn" type="submit" class="btn btn--primary" @if(empty($selectedClientId) || $vouchers->isEmpty()) disabled @endif>
         <span class="btn__label">Lanjut ke Pembayaran</span>
         <span class="spinner hidden" aria-hidden="true"></span>
       </button>
