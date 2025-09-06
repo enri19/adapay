@@ -80,7 +80,7 @@
                 <option
                   value="{{ $c->client_id }}"
                   data-slug="{{ $c->slug }}"
-                  @selected((string)$selectedClientId === (string)$c->client_id)
+                  @if(!empty($selectedClientId) && $selectedClientId === $c->client_id) selected @endif
                 >
                   {{ $c->name }} ({{ $c->client_id }})
                 </option>
