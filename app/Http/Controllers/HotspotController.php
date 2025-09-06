@@ -43,7 +43,7 @@ class HotspotController extends Controller
     // voucher hanya di-load jika sudah ada client terpilih
     $vouchers = $selectedClientId ? \App\Models\HotspotVoucher::listForPortal($selectedClientId) : collect();
 
-    return view('hotspot.snap', [
+    return view('hotspot.index', [
       'vouchers'         => $vouchers,
       'resolvedClientId' => $selectedClientId, // bisa null
       'isBaseHost'       => $isBaseHost,
