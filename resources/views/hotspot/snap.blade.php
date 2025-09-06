@@ -89,10 +89,11 @@
                 <option
                   value="{{ $c->client_id }}"
                   data-slug="{{ $c->slug }}"
-                  @selected((string)$currentClientId === (string)$c->client_id)
+                  @selected((string) $currentClientId === (string) $c->client_id)
                 >
                   {{ $c->name }} ({{ $c->client_id }})
                 </option>
+
               @empty
                 <option value="" disabled selected>Tidak ada mitra aktif</option>
               @endforelse
