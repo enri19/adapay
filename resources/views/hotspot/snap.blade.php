@@ -87,11 +87,9 @@
               <option value="" disabled @selected($currentClientId === '')>— Pilih Mitra —</option>
 
               @forelse ($clients as $c)
-                <option
-                  value="{{ $c->client_id }}"
+                <option value="{{ $c->client_id }}"
                   data-slug="{{ $c->slug }}"
-                  @selected((string) $currentClientId === (string) $c->client_id)
-                >
+                  @if(!empty($resolvedClientId) && $resolvedClientId === $c->client_id) selected @endif>
                   {{ $c->name }} ({{ $c->client_id }})
                 </option>
               @empty
