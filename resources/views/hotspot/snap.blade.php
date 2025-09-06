@@ -59,18 +59,11 @@
     </div>
 
     @php
-      $host = strtolower(request()->getHost());
-      $baseHost = strtolower(config('app.base_host', 'pay.adanih.info'));
-      $isBaseHost = ($host === $baseHost);
+      $isBaseHost = strtolower(request()->getHost()) === 'pay.adanih.info';
     @endphp
-
 
     <form id="formCheckout" class="space-y-3" novalidate>
       {{-- Tampil hanya jika di base host --}}
-      @php
-        $currentClientId = old('client', (string)($resolvedClientId ?? ''));
-      @endphp
-
       @if ($isBaseHost)
         <div class="subcard">
           <div class="subcard-hd">Pilih Mitra</div>
