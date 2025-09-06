@@ -511,6 +511,8 @@ class HotspotController extends Controller
         }
       }
 
+      \Log::info($snap);
+
       // Simpan Hotspot Order
       \App\Models\HotspotOrder::updateOrCreate(
         ['order_id' => $orderId],
@@ -681,7 +683,7 @@ class HotspotController extends Controller
       $payUrl   = $this->extractPayActionUrl($resp) ?? $orderUrl;
 
       $amount = (int) round((float) ($resp['gross_amount'] ?? $voucher->price));
-      $method = strtoupper($resp['payment_type'] ?? ($data['method'] ?? 'QRIS'));
+      $method = strtoupper($resp['payment_type'] ?? ($data['method'] ?? ''));
       $status = strtoupper($resp['transaction_status'] ?? ($resp['status'] ?? 'PENDING'));
 
       $msg = $this->buildWaInvoiceMessage([
