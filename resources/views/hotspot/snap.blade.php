@@ -82,7 +82,7 @@
               @forelse ($clients as $c)
                 <option value="{{ $c->client_id }}"
                   data-slug="{{ $c->slug }}"
-                  @if(!empty($resolvedClientId) && $resolvedClientId === $c->client_id) selected @endif>
+                >
                   {{ $c->name }} ({{ $c->client_id }})
                 </option>
               @empty
